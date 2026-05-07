@@ -312,9 +312,9 @@ pub fn write_ls(report: &LsReport, json: bool, options: LsDisplayOptions) -> Res
                 entry.modified.as_deref().unwrap_or("-"),
                 name
             ),
-            (false, true, true) => println!("{:>10} {:>12} {}", entry.id, size, name),
-            (false, true, false) => println!("{:>10} {}", entry.id, name),
-            (false, false, true) => println!("{:>12} {}", size, name),
+            (false, true, true) => println!("{:>10} {size:>12} {name}", entry.id),
+            (false, true, false) => println!("{:>10} {name}", entry.id),
+            (false, false, true) => println!("{size:>12} {name}"),
             (false, false, false) => println!("{name}"),
         }
     }

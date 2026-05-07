@@ -4,6 +4,8 @@
 
 The TP-7 normally appears as a USB audio/MIDI device. `tp7` can send the device-specific MIDI mode switch, wait for the recorder to re-enumerate as MTP, open a direct MTP session, perform the file operation, and close the session again.
 
+This is an unofficial project and is not affiliated with Teenage Engineering.
+
 ## What it does
 
 `tp7` gives the terminal a practical file-access surface for the recorder. Common tasks:
@@ -94,17 +96,25 @@ This is a direct MTP CLI, not a Finder mount. A future FUSE mount is documented 
 ## Local requirements
 
 - macOS
-- Rust toolchain
 - A Teenage Engineering TP-7 connected over USB
+- Rust 1.88 or newer for source builds and development
 
 No Android File Transfer, FieldKit, libmtp, or kernel extension is required for the direct CLI workflow.
 
 ## Install
 
+With Homebrew:
+
+```sh
+brew tap totocaster/tap
+brew install totocaster/tap/tp7
+tp7 --version
+```
+
 From this repository:
 
 ```sh
-cargo install --path .
+cargo install --path . --locked
 ```
 
 Or during development:
@@ -122,6 +132,7 @@ cargo fmt -- --check
 cargo check
 cargo clippy -- -D warnings
 cargo test
+cargo run -- --help
 ```
 
 When the TP-7 is connected and write behavior changes, run the hardware smoke script. It creates only tiny temporary text files under `/memo` by default:
@@ -137,6 +148,21 @@ Protocol notes and implementation planning live in:
 - `docs/spec.md`
 - `docs/tp7-handshake.md`
 
+## Release Process
+
+Releases are tag-driven and update the Homebrew tap automatically:
+
+1. Update the package version in `Cargo.toml`.
+2. Commit the release change.
+3. Tag the commit as `vX.Y.Z`.
+4. Push the tag.
+
+The GitHub `Release` workflow verifies formatting, check, clippy, tests, and a CLI smoke test, then builds `aarch64-apple-darwin` and `x86_64-apple-darwin` release archives. After publishing the GitHub release, it rewrites `Formula/tp7.rb` in `totocaster/homebrew-tap` with the new artifact URLs and SHA256 sums. The `HOMEBREW_TAP_TOKEN` repository secret must be configured for the tap push.
+
 ## License
 
 MIT. See `LICENSE`.
+
+## Contributing and Security
+
+Contribution guidelines are in `CONTRIBUTING.md`. For vulnerability reports or data-safety concerns, see `SECURITY.md`.

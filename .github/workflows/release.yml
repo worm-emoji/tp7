@@ -1,0 +1,257 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: 1.88.0
+  BIN_NAME: tp7
+
+jobs:
+  verify:
+    name: Verify build
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-target-
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Build check
+        run: cargo check
+
+      - name: Clippy lint
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test
+
+      - name: CLI smoke
+        run: cargo run -- --help
+
+  build:
+    name: Build macOS binaries
+    needs: verify
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+
+      - name: Add compilation targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}-macos
+          restore-keys: |
+            ${{ runner.os }}-target-
+
+      - name: Build release binaries
+        run: |
+          set -euo pipefail
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --locked --target "${target}"
+          done
+
+      - name: Prepare dist artifacts
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ -z "${VERSION}" || "${VERSION}" == "${GITHUB_REF_NAME}" ]]; then
+            echo "Version could not be derived from tag ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          MANIFEST_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          if [[ "${MANIFEST_VERSION}" != "${VERSION}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${MANIFEST_VERSION}" >&2
+            exit 1
+          fi
+
+          mkdir -p dist
+
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            ARCHIVE_NAME="${BIN_NAME}-${VERSION}-${target}"
+            DIST_ROOT="dist/${ARCHIVE_NAME}"
+            mkdir -p "${DIST_ROOT}/bin"
+
+            cp "target/${target}/release/${BIN_NAME}" "${DIST_ROOT}/bin/"
+            chmod 755 "${DIST_ROOT}/bin/${BIN_NAME}"
+            cp README.md "${DIST_ROOT}/"
+            cp LICENSE "${DIST_ROOT}/"
+
+            tar -czf "dist/${ARCHIVE_NAME}.tar.gz" -C dist "${ARCHIVE_NAME}"
+            shasum -a 256 "dist/${ARCHIVE_NAME}.tar.gz" | awk '{print $1}' > "dist/${ARCHIVE_NAME}.sha256"
+
+            rm -rf "${DIST_ROOT}"
+          done
+
+          echo "archive_prefix=${BIN_NAME}-${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.archive_prefix }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: vars
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ -z "${VERSION}" || "${VERSION}" == "${GITHUB_REF_NAME}" ]]; then
+            echo "Release workflow must be triggered from a tag that starts with v" >&2
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Collect artifact metadata
+        id: metadata
+        run: |
+          set -euo pipefail
+          TAG_NAME="${GITHUB_REF_NAME}"
+          REPOSITORY="${GITHUB_REPOSITORY}"
+
+          arm_url=""
+          arm_sha=""
+          intel_url=""
+          intel_sha=""
+
+          for archive in dist/*.tar.gz; do
+            filename="$(basename "${archive}")"
+            checksum="$(shasum -a 256 "${archive}" | awk '{print $1}')"
+            url="https://github.com/${REPOSITORY}/releases/download/${TAG_NAME}/${filename}"
+
+            if [[ "${filename}" == *"aarch64-apple-darwin.tar.gz" ]]; then
+              arm_url="${url}"
+              arm_sha="${checksum}"
+            elif [[ "${filename}" == *"x86_64-apple-darwin.tar.gz" ]]; then
+              intel_url="${url}"
+              intel_sha="${checksum}"
+            fi
+          done
+
+          if [[ -z "${arm_url}" || -z "${intel_url}" ]]; then
+            echo "Missing expected macOS artifacts in dist/ directory" >&2
+            exit 1
+          fi
+
+          echo "arm_url=${arm_url}" >> "${GITHUB_OUTPUT}"
+          echo "arm_sha=${arm_sha}" >> "${GITHUB_OUTPUT}"
+          echo "intel_url=${intel_url}" >> "${GITHUB_OUTPUT}"
+          echo "intel_sha=${intel_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew tap
+        env:
+          TAP_REPO: totocaster/homebrew-tap
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.vars.outputs.version }}
+          ARM_URL: ${{ steps.metadata.outputs.arm_url }}
+          ARM_SHA: ${{ steps.metadata.outputs.arm_sha }}
+          INTEL_URL: ${{ steps.metadata.outputs.intel_url }}
+          INTEL_SHA: ${{ steps.metadata.outputs.intel_sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${TAP_TOKEN:-}" ]]; then
+            echo "The HOMEBREW_TAP_TOKEN secret must be configured to push updates to ${TAP_REPO}" >&2
+            exit 1
+          fi
+
+          WORKDIR="$(mktemp -d)"
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" "${WORKDIR}"
+
+          ./scripts/update-homebrew-tap.sh "${WORKDIR}" "${VERSION}" "${ARM_URL}" "${ARM_SHA}" "${INTEL_URL}" "${INTEL_SHA}"
+
+          pushd "${WORKDIR}" >/dev/null
+          if git status --porcelain | grep .; then
+            git config user.name "tp7-bot"
+            git config user.email "tp7-bot@users.noreply.github.com"
+            git add Formula/tp7.rb
+            git commit -m "chore: release tp7 v${VERSION}"
+            git push origin HEAD:main
+          else
+            echo "No tap changes detected; skipping push."
+          fi
+          popd >/dev/null
