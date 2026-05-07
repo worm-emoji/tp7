@@ -370,8 +370,8 @@ depend on stored CLI state.
 
 Implementation notes:
 
-- With no mount point, the CLI uses `/Volumes/TP-7`. If that path is already
-  mounted or unavailable, it tries numbered siblings such as `/Volumes/TP-7-2`.
+- With no mount point, the CLI uses `~/TP-7`. If that path is already mounted
+  or unavailable, it tries numbered siblings such as `~/TP-7-2`.
 - An explicit mount point is created when missing, but must be an empty
   directory before mounting.
 - The Rust FUSE stack requires macFUSE/Fuse-T development metadata at build

@@ -95,7 +95,7 @@ The TP-7 firmware tested here (`1.1.9`) accepts file upload, rename, delete, and
 - `push --recursive` uploads into an existing remote folder tree only.
 - Missing remote folders are detected before any recursive upload starts.
 
-Finder mounting is read-write by default. By default `tp7 mount` uses `/Volumes/TP-7`, creating it when permissions allow. If `/Volumes/TP-7` is already in use, it tries `/Volumes/TP-7-2`, `/Volumes/TP-7-3`, and so on. You can also pass your own empty directory or use `--read-only` for an inspection-only mount.
+Finder mounting is read-write by default. By default `tp7 mount` uses `~/TP-7`, creating it when needed. If `~/TP-7` is already in use, it tries `~/TP-7-2`, `~/TP-7-3`, and so on. You can also pass your own empty directory or use `--read-only` for an inspection-only mount.
 
 Because TP-7 firmware `1.1.9` rejects MTP folder creation, creating folders from Finder may fail even though file copy, overwrite, rename, and delete use writable MTP operations.
 

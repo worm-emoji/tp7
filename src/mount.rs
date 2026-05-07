@@ -11,8 +11,7 @@ use crate::device::{Tp7Device, UsbMode};
 use crate::mtp_session::{MtpOpenPolicy, open_mtp_session};
 use crate::output::AppError;
 
-const DEFAULT_MOUNTPOINT: &str = "/Volumes/TP-7";
-const DEFAULT_MOUNTPOINT_PREFIX: &str = "/Volumes/TP-7";
+const DEFAULT_MOUNTPOINT_NAME: &str = "TP-7";
 const MAX_DEFAULT_MOUNTPOINT_ATTEMPTS: usize = 99;
 
 #[derive(Debug, Clone, Serialize)]
@@ -209,16 +208,47 @@ fn prepare_default_mountpoint() -> Result<PathBuf, AppError> {
 
     Err(AppError::Mount {
         message: format!(
-            "no available default mount point found under {DEFAULT_MOUNTPOINT_PREFIX}; pass an explicit mount point"
+            "no available default mount point found under {}; pass an explicit mount point",
+            default_mountpoint_base_label()
         ),
     })
 }
 
 fn default_mountpoint_candidate(index: usize) -> PathBuf {
+    let base = default_mountpoint_base();
     if index == 1 {
-        PathBuf::from(DEFAULT_MOUNTPOINT)
+        base
     } else {
-        PathBuf::from(format!("{DEFAULT_MOUNTPOINT_PREFIX}-{index}"))
+        numbered_default_mountpoint_base(base, index)
+    }
+}
+
+fn default_mountpoint_base() -> PathBuf {
+    match std::env::var_os("HOME") {
+        Some(home) if !home.is_empty() => PathBuf::from(home).join(DEFAULT_MOUNTPOINT_NAME),
+        _ => PathBuf::from(DEFAULT_MOUNTPOINT_NAME),
+    }
+}
+
+fn numbered_default_mountpoint_base(base: PathBuf, index: usize) -> PathBuf {
+    let mut name = base
+        .file_name()
+        .map(|name| name.to_os_string())
+        .unwrap_or_else(|| DEFAULT_MOUNTPOINT_NAME.into());
+    name.push(format!("-{index}"));
+
+    match base.parent() {
+        Some(parent) => parent.join(name),
+        None => PathBuf::from(name),
+    }
+}
+
+fn default_mountpoint_base_label() -> String {
+    match std::env::var_os("HOME") {
+        Some(home) if !home.is_empty() => {
+            format!("{}/{}", Path::new(&home).display(), DEFAULT_MOUNTPOINT_NAME)
+        }
+        _ => DEFAULT_MOUNTPOINT_NAME.to_string(),
     }
 }
 
@@ -226,9 +256,7 @@ fn create_mountpoint_dir(path: &Path, default_mountpoint: bool) -> Result<PathBu
     fs::create_dir_all(path).map_err(|error| AppError::FileSystem {
         path: path_to_string(path),
         message: if default_mountpoint {
-            format!(
-                "could not create default mount point: {error}. Create it with administrator privileges or pass a directory you own"
-            )
+            format!("could not create default mount point: {error}. Pass an explicit empty directory you own")
         } else {
             error.to_string()
         },
@@ -297,7 +325,7 @@ fn resolve_default_unmount_mountpoint() -> Result<PathBuf, AppError> {
     let mountpoints = find_tp7_mountpoints().map_err(|message| AppError::Unmount { message })?;
 
     match mountpoints.as_slice() {
-        [] => Ok(PathBuf::from(DEFAULT_MOUNTPOINT)),
+        [] => Ok(default_mountpoint_base()),
         [mountpoint] => Ok(mountpoint.clone()),
         _ => Err(AppError::Unmount {
             message: format!(

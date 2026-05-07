@@ -230,7 +230,7 @@ pub struct RenameArgs {
 
 #[derive(Debug, Args)]
 pub struct MountArgs {
-    #[arg(help = "Local mount point; defaults to /Volumes/TP-7")]
+    #[arg(help = "Local mount point; defaults to ~/TP-7")]
     pub mountpoint: Option<String>,
 
     #[arg(long, help = "Mount without allowing Finder writes")]
