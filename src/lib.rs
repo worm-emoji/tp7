@@ -6,7 +6,11 @@ mod ls;
 mod midi;
 mod mtp_session;
 mod output;
+mod pull;
+mod remote;
+mod stat;
 mod status;
+mod tree;
 mod usb_owner;
 
 pub use output::AppError;
@@ -45,9 +49,38 @@ pub fn run() -> Result<(), AppError> {
             )?;
             output::write_ls(&report, cli.json, args.long, args.ids)
         }
-        Command::Tree { .. } => Err(AppError::not_implemented("tree")),
-        Command::Stat { .. } => Err(AppError::not_implemented("stat")),
-        Command::Pull { .. } => Err(AppError::not_implemented("pull")),
+        Command::Tree(args) => {
+            let report = tree::run_tree(
+                cli.device.as_deref(),
+                cli.auto_connect,
+                args.remote_path.as_str(),
+                args.depth,
+            )?;
+            output::write_tree(&report, cli.json, args.ids)
+        }
+        Command::Stat(args) => {
+            let report = stat::run_stat(
+                cli.device.as_deref(),
+                cli.auto_connect,
+                args.remote_path.as_str(),
+            )?;
+            output::write_stat(&report, cli.json)
+        }
+        Command::Pull(args) => {
+            let report = pull::run_pull(
+                cli.device.as_deref(),
+                cli.auto_connect,
+                args.remote_path.as_str(),
+                args.local_path.as_deref(),
+                pull::PullOptions {
+                    recursive: args.recursive,
+                    overwrite: args.overwrite,
+                    skip_existing: args.skip_existing,
+                    dry_run: args.dry_run,
+                },
+            )?;
+            output::write_pull(&report, cli.json)
+        }
         Command::Push { .. } => Err(AppError::not_implemented("push")),
         Command::Mkdir { .. } => Err(AppError::not_implemented("mkdir")),
         Command::Rm { .. } => Err(AppError::not_implemented("rm")),

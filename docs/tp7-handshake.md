@@ -143,5 +143,5 @@ What each step taught us:
   but it should not require those apps.
 - Newer firmware accepts mode payload `[0x01, 0x03]`. FieldKit suggests
   `[0x01, 0x02]` may be a fallback for older firmware.
-- MTP support lives behind our own session layer so `ls`, `tree`, `stat`, and
-  `pull` can share the same handshake behavior.
+- MTP support lives behind our own session layer. `ls`, `tree`, `stat`, and
+  `pull` now use that same switch/open/work/close flow.

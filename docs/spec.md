@@ -382,7 +382,7 @@ Current choices:
 
 ## Implementation Plan
 
-Phases 0 through 3 now have working prototype coverage: CLI scaffolding, USB detection, diagnostics, CoreMIDI mode switching, and MTP status validation. Phase 4 has started with a shared MTP session layer and `tp7 ls` support for root and nested paths.
+Phases 0 through 4 now have working prototype coverage: CLI scaffolding, USB detection, diagnostics, CoreMIDI mode switching, MTP status validation, shared session handling, and read-only file exploration. Phase 5 has started with direct `tp7 pull` downloads.
 
 ### Phase 0: Baseline Project
 
@@ -435,8 +435,8 @@ Implement object tree traversal and remote path resolution.
 Deliverable:
 
 - `tp7 ls` (implemented for folder listings, file targets, `--long`, `--ids`, and `--json`)
-- `tp7 tree`
-- `tp7 stat`
+- `tp7 tree` (implemented for recursive folder output, `--depth`, `--ids`, and `--json`)
+- `tp7 stat` (implemented for file/folder object metadata and `--json`)
 
 ### Phase 5: Transfers
 
@@ -444,7 +444,7 @@ Implement downloads first, then uploads.
 
 Deliverable:
 
-- `tp7 pull`
+- `tp7 pull` (implemented for files and recursive folders, with `--dry-run`, `--overwrite`, and `--skip-existing`)
 - `tp7 push`
 - progress reporting
 - skip/overwrite behavior

@@ -4,8 +4,12 @@ use thiserror::Error;
 use crate::connect::ConnectReport;
 use crate::device::{Tp7Device, interface_summary};
 use crate::doctor::{DoctorReport, ProcessConflict};
-use crate::ls::{LsReport, ObjectKind};
+use crate::ls::LsReport;
+use crate::pull::{PullReport, PullStatus};
+use crate::remote::ObjectKind;
+use crate::stat::StatReport;
 use crate::status::StatusReport;
+use crate::tree::TreeReport;
 use crate::usb_owner::UsbOwner;
 
 #[derive(Debug, Error)]
@@ -45,6 +49,27 @@ pub enum AppError {
     #[error("remote path is not a folder: {path}")]
     RemotePathNotDirectory { path: String },
 
+    #[error("remote path is the storage root; use `tp7 ls /` to inspect it")]
+    RemotePathIsRoot,
+
+    #[error("remote path is a folder; rerun with --recursive to download it: {path}")]
+    RemotePathIsFolder { path: String },
+
+    #[error("local path already exists; use --overwrite or --skip-existing: {path}")]
+    LocalPathExists { path: String },
+
+    #[error("local path is a directory: {path}")]
+    LocalPathIsDirectory { path: String },
+
+    #[error("local path is a file: {path}")]
+    LocalPathIsFile { path: String },
+
+    #[error("file operation failed for {path}: {message}")]
+    FileSystem { path: String, message: String },
+
+    #[error("invalid arguments: {message}")]
+    InvalidArguments { message: String },
+
     #[error("MTP operation failed: {message}")]
     Mtp { message: String },
 
@@ -83,7 +108,14 @@ impl AppError {
 
     pub fn exit_code(&self) -> i32 {
         match self {
-            AppError::NotImplemented { .. } | AppError::InvalidRemotePath { .. } => 2,
+            AppError::NotImplemented { .. }
+            | AppError::InvalidRemotePath { .. }
+            | AppError::RemotePathIsRoot
+            | AppError::RemotePathIsFolder { .. }
+            | AppError::LocalPathExists { .. }
+            | AppError::LocalPathIsDirectory { .. }
+            | AppError::LocalPathIsFile { .. }
+            | AppError::InvalidArguments { .. } => 2,
             AppError::MtpNotVisible { .. } | AppError::AutoConnectRequired { .. } => 3,
             AppError::MtpExclusiveAccess { .. } => 4,
             AppError::Midi { .. }
@@ -97,6 +129,7 @@ impl AppError {
             | AppError::MultipleDevices { .. }
             | AppError::RemotePathNotFound { .. }
             | AppError::RemotePathNotDirectory { .. }
+            | AppError::FileSystem { .. }
             | AppError::Mtp { .. }
             | AppError::Runtime { .. }
             | AppError::Json { .. } => 1,
@@ -238,6 +271,83 @@ pub fn write_ls(report: &LsReport, json: bool, long: bool, ids: bool) -> Result<
     Ok(())
 }
 
+pub fn write_stat(report: &StatReport, json: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    println!(
+        "{}  {}  {}",
+        report.path,
+        ls_kind_label(&report.object.kind),
+        report.object.name
+    );
+    println!("  id: {}", report.object.id);
+    println!("  parent: {}", report.object.parent_id);
+    println!("  storage: {}", report.object.storage_id);
+    println!("  size: {}", report.object.size);
+    println!("  format: {} ({})", report.format, report.format_code);
+    println!("  created: {}", report.created.as_deref().unwrap_or("-"));
+    println!(
+        "  modified: {}",
+        report.object.modified.as_deref().unwrap_or("-")
+    );
+
+    Ok(())
+}
+
+pub fn write_tree(report: &TreeReport, json: bool, ids: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    let entry_is_requested_file =
+        report.entries.len() == 1 && report.entries[0].path == report.path;
+    let root_indent = if entry_is_requested_file {
+        0
+    } else {
+        println!("{}", report.path);
+        1
+    };
+
+    for entry in &report.entries {
+        let indent = "  ".repeat(entry.depth + root_indent);
+        let name = ls_display_name(entry.object.name.as_str(), &entry.object.kind);
+
+        if ids {
+            println!("{indent}{:>10} {name}", entry.object.id);
+        } else {
+            println!("{indent}{name}");
+        }
+    }
+
+    Ok(())
+}
+
+pub fn write_pull(report: &PullReport, json: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    for file in &report.files {
+        let status = pull_status_label(&file.status);
+        println!(
+            "{status} {} -> {} ({} bytes)",
+            file.remote_path, file.local_path, file.size
+        );
+    }
+
+    println!(
+        "{} downloaded, {} skipped, {} bytes",
+        report.downloaded, report.skipped, report.total_bytes
+    );
+
+    Ok(())
+}
+
 pub fn write_doctor(report: &DoctorReport, json: bool) -> Result<(), AppError> {
     if json {
         write_json(report)?;
@@ -302,6 +412,14 @@ fn ls_display_name(name: &str, kind: &ObjectKind) -> String {
     match kind {
         ObjectKind::File => name.to_string(),
         ObjectKind::Folder => format!("{name}/"),
+    }
+}
+
+fn pull_status_label(status: &PullStatus) -> &'static str {
+    match status {
+        PullStatus::Downloaded => "downloaded",
+        PullStatus::DryRun => "would download",
+        PullStatus::Skipped => "skipped",
     }
 }
 
