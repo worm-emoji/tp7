@@ -1,5 +1,5 @@
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use mtp_rs::Storage;
@@ -46,6 +46,7 @@ pub struct PullOptions {
     pub overwrite: bool,
     pub skip_existing: bool,
     pub dry_run: bool,
+    pub progress: bool,
 }
 
 pub fn run_pull(
@@ -212,8 +213,20 @@ async fn pull_file(
         }
         PullStatus::Downloaded => {
             let temp_path = temp_download_path(local_path)?;
-            download_to_path(storage, object.handle, &temp_path).await?;
-            rename_file(&temp_path, local_path)?;
+            if let Err(error) =
+                download_to_path(storage, object.handle, object.size, &temp_path, options).await
+            {
+                let _ = fs::remove_file(&temp_path);
+                return Err(error);
+            }
+            if let Err(error) = rename_file(&temp_path, local_path) {
+                let _ = fs::remove_file(&temp_path);
+                return Err(error);
+            }
+            if let Err(error) = verify_file_size(local_path, object.size) {
+                let _ = fs::remove_file(local_path);
+                return Err(error);
+            }
 
             report.downloaded += 1;
             report.total_bytes += object.size;
@@ -231,7 +244,9 @@ async fn pull_file(
 async fn download_to_path(
     storage: &Storage,
     handle: ObjectHandle,
+    expected_size: u64,
     local_path: &Path,
+    options: PullOptions,
 ) -> Result<(), AppError> {
     let mut download = storage
         .download_stream(handle)
@@ -240,13 +255,23 @@ async fn download_to_path(
     let mut file = create_file(local_path)?;
 
     while let Some(chunk) = download.next_chunk().await {
-        let bytes = chunk.map_err(map_mtp_error)?;
+        let bytes = match chunk {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                let _ = download.cancel(DEFAULT_CANCEL_TIMEOUT).await;
+                finish_progress(options.progress);
+                return Err(map_mtp_error(error));
+            }
+        };
         if let Err(error) = file.write_all(&bytes) {
             let _ = download.cancel(DEFAULT_CANCEL_TIMEOUT).await;
+            finish_progress(options.progress);
             return Err(io_error(local_path, error));
         }
+        write_progress(options.progress, download.bytes_received(), expected_size);
     }
 
+    finish_progress(options.progress);
     file.flush().map_err(|error| io_error(local_path, error))?;
     Ok(())
 }
@@ -347,6 +372,27 @@ fn validate_options(options: PullOptions) -> Result<(), AppError> {
     Ok(())
 }
 
+fn write_progress(enabled: bool, transferred: u64, total: u64) {
+    if !enabled {
+        return;
+    }
+
+    let percent = if total == 0 {
+        100.0
+    } else {
+        transferred as f64 / total as f64 * 100.0
+    };
+
+    eprint!("\rdownloaded {transferred}/{total} bytes ({percent:.1}%)");
+    let _ = io::stderr().flush();
+}
+
+fn finish_progress(enabled: bool) {
+    if enabled {
+        eprintln!();
+    }
+}
+
 fn local_path_looks_like_directory(path: &Path) -> bool {
     path.to_string_lossy().ends_with('/')
 }
@@ -386,6 +432,22 @@ fn create_dir_all(path: &Path) -> Result<(), AppError> {
 
 fn rename_file(from: &Path, to: &Path) -> Result<(), AppError> {
     fs::rename(from, to).map_err(|error| io_error(to, error))
+}
+
+fn verify_file_size(path: &Path, expected_size: u64) -> Result<(), AppError> {
+    let actual_size = fs::metadata(path)
+        .map_err(|error| io_error(path, error))?
+        .len();
+
+    if actual_size != expected_size {
+        return Err(AppError::TransferVerification {
+            path: path_to_string(path),
+            expected_size,
+            actual_size,
+        });
+    }
+
+    Ok(())
 }
 
 fn io_error(path: &Path, error: std::io::Error) -> AppError {
@@ -441,9 +503,21 @@ mod tests {
             overwrite: true,
             skip_existing: true,
             dry_run: false,
+            progress: false,
         })
         .unwrap_err();
 
         assert!(matches!(error, AppError::InvalidArguments { .. }));
+    }
+
+    #[test]
+    fn detects_size_mismatch() {
+        let path = Path::new("target/tp7-unit-size-mismatch.tmp");
+        fs::write(path, b"abc").unwrap();
+
+        let error = verify_file_size(path, 4).unwrap_err();
+        let _ = fs::remove_file(path);
+
+        assert!(matches!(error, AppError::TransferVerification { .. }));
     }
 }

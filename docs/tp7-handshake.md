@@ -144,4 +144,7 @@ What each step taught us:
 - Newer firmware accepts mode payload `[0x01, 0x03]`. FieldKit suggests
   `[0x01, 0x02]` may be a fallback for older firmware.
 - MTP support lives behind our own session layer. `ls`, `tree`, `stat`, and
-  `pull` now use that same switch/open/work/close flow.
+  `pull`, `push`, `rename`, and `rm` now use that same switch/open/work/close
+  flow.
+- TP-7 firmware `1.1.9` accepted file upload, rename, and delete in smoke tests,
+  but rejected folder creation with MTP `GeneralError`.

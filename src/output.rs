@@ -6,11 +6,13 @@ use crate::device::{Tp7Device, interface_summary};
 use crate::doctor::{DoctorReport, ProcessConflict};
 use crate::ls::LsReport;
 use crate::pull::{PullReport, PullStatus};
+use crate::push::{PushReport, PushStatus};
 use crate::remote::ObjectKind;
 use crate::stat::StatReport;
 use crate::status::StatusReport;
 use crate::tree::TreeReport;
 use crate::usb_owner::UsbOwner;
+use crate::write_ops::{MkdirReport, RenameReport, RmReport};
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -52,7 +54,7 @@ pub enum AppError {
     #[error("remote path is the storage root; use `tp7 ls /` to inspect it")]
     RemotePathIsRoot,
 
-    #[error("remote path is a folder; rerun with --recursive to download it: {path}")]
+    #[error("remote path is a folder; rerun with --recursive: {path}")]
     RemotePathIsFolder { path: String },
 
     #[error("local path already exists; use --overwrite or --skip-existing: {path}")]
@@ -64,14 +66,32 @@ pub enum AppError {
     #[error("local path is a file: {path}")]
     LocalPathIsFile { path: String },
 
+    #[error("local path is a folder; directory upload is not implemented yet: {path}")]
+    LocalPathIsFolder { path: String },
+
+    #[error("remote path already exists; use --overwrite to replace it: {path}")]
+    RemotePathExists { path: String },
+
     #[error("file operation failed for {path}: {message}")]
     FileSystem { path: String, message: String },
+
+    #[error(
+        "download verification failed for {path}: expected {expected_size} bytes, got {actual_size}"
+    )]
+    TransferVerification {
+        path: String,
+        expected_size: u64,
+        actual_size: u64,
+    },
 
     #[error("invalid arguments: {message}")]
     InvalidArguments { message: String },
 
     #[error("MTP operation failed: {message}")]
     Mtp { message: String },
+
+    #[error("MTP operation is not supported: {message}")]
+    MtpUnsupported { message: String },
 
     #[error("MTP device is busy or owned by another process: {message}")]
     MtpExclusiveAccess { message: String },
@@ -115,6 +135,8 @@ impl AppError {
             | AppError::LocalPathExists { .. }
             | AppError::LocalPathIsDirectory { .. }
             | AppError::LocalPathIsFile { .. }
+            | AppError::LocalPathIsFolder { .. }
+            | AppError::RemotePathExists { .. }
             | AppError::InvalidArguments { .. } => 2,
             AppError::MtpNotVisible { .. } | AppError::AutoConnectRequired { .. } => 3,
             AppError::MtpExclusiveAccess { .. } => 4,
@@ -130,7 +152,9 @@ impl AppError {
             | AppError::RemotePathNotFound { .. }
             | AppError::RemotePathNotDirectory { .. }
             | AppError::FileSystem { .. }
+            | AppError::TransferVerification { .. }
             | AppError::Mtp { .. }
+            | AppError::MtpUnsupported { .. }
             | AppError::Runtime { .. }
             | AppError::Json { .. } => 1,
         }
@@ -348,6 +372,76 @@ pub fn write_pull(report: &PullReport, json: bool) -> Result<(), AppError> {
     Ok(())
 }
 
+pub fn write_push(report: &PushReport, json: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    for file in &report.files {
+        let status = push_status_label(&file.status);
+        println!(
+            "{status} {} -> {} ({} bytes)",
+            file.local_path, file.remote_path, file.size
+        );
+    }
+
+    println!("{} uploaded, {} bytes", report.uploaded, report.total_bytes);
+
+    Ok(())
+}
+
+pub fn write_mkdir(report: &MkdirReport, json: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    if report.created.is_empty() {
+        println!("exists {}", report.path);
+    } else {
+        for path in &report.created {
+            println!("created {path}");
+        }
+    }
+
+    Ok(())
+}
+
+pub fn write_rename(report: &RenameReport, json: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    println!("renamed {} -> {}", report.old_path, report.new_path);
+
+    Ok(())
+}
+
+pub fn write_rm(report: &RmReport, json: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    if report.removed.is_empty() {
+        println!("nothing removed");
+        return Ok(());
+    }
+
+    for object in &report.removed {
+        let status = if report.dry_run {
+            "would remove"
+        } else {
+            "removed"
+        };
+        println!("{status} {} ({})", report.path, ls_kind_label(&object.kind));
+    }
+
+    Ok(())
+}
+
 pub fn write_doctor(report: &DoctorReport, json: bool) -> Result<(), AppError> {
     if json {
         write_json(report)?;
@@ -420,6 +514,13 @@ fn pull_status_label(status: &PullStatus) -> &'static str {
         PullStatus::Downloaded => "downloaded",
         PullStatus::DryRun => "would download",
         PullStatus::Skipped => "skipped",
+    }
+}
+
+fn push_status_label(status: &PushStatus) -> &'static str {
+    match status {
+        PushStatus::Uploaded => "uploaded",
+        PushStatus::DryRun => "would upload",
     }
 }
 

@@ -445,7 +445,7 @@ Implement downloads first, then uploads.
 Deliverable:
 
 - `tp7 pull` (implemented for files and recursive folders, with `--dry-run`, `--overwrite`, and `--skip-existing`)
-- `tp7 push`
+- `tp7 push` (implemented for files, with `--dry-run` and `--overwrite`; directory upload is still deferred)
 - progress reporting
 - skip/overwrite behavior
 
@@ -455,9 +455,9 @@ Implement safer write operations after listing and transfer are proven.
 
 Deliverable:
 
-- `tp7 mkdir`
-- `tp7 rename`
-- `tp7 rm`
+- `tp7 mkdir` (command implemented, but TP-7 firmware 1.1.9 rejected folder creation with MTP `GeneralError`)
+- `tp7 rename` (implemented and smoke-tested on a pushed file)
+- `tp7 rm` (implemented and smoke-tested on a pushed file)
 - dry-run behavior
 
 ### Phase 7: Mount Research

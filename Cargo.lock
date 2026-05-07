@@ -699,9 +699,11 @@ dependencies = [
 name = "tp7"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "clap",
  "coremidi",
  "env_logger",
+ "futures",
  "log",
  "mtp-rs",
  "nusb",

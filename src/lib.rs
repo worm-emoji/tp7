@@ -7,11 +7,13 @@ mod midi;
 mod mtp_session;
 mod output;
 mod pull;
+mod push;
 mod remote;
 mod stat;
 mod status;
 mod tree;
 mod usb_owner;
+mod write_ops;
 
 pub use output::AppError;
 
@@ -77,14 +79,55 @@ pub fn run() -> Result<(), AppError> {
                     overwrite: args.overwrite,
                     skip_existing: args.skip_existing,
                     dry_run: args.dry_run,
+                    progress: !cli.no_progress && !cli.json && !args.dry_run,
                 },
             )?;
             output::write_pull(&report, cli.json)
         }
-        Command::Push { .. } => Err(AppError::not_implemented("push")),
-        Command::Mkdir { .. } => Err(AppError::not_implemented("mkdir")),
-        Command::Rm { .. } => Err(AppError::not_implemented("rm")),
-        Command::Rename { .. } => Err(AppError::not_implemented("rename")),
+        Command::Push(args) => {
+            let report = push::run_push(
+                cli.device.as_deref(),
+                cli.auto_connect,
+                args.local_path.as_str(),
+                args.remote_path.as_str(),
+                push::PushOptions {
+                    recursive: args.recursive,
+                    overwrite: args.overwrite,
+                    dry_run: args.dry_run,
+                    progress: !cli.no_progress && !cli.json && !args.dry_run,
+                },
+            )?;
+            output::write_push(&report, cli.json)
+        }
+        Command::Mkdir(args) => {
+            let report = write_ops::run_mkdir(
+                cli.device.as_deref(),
+                cli.auto_connect,
+                args.remote_path.as_str(),
+                args.parents,
+            )?;
+            output::write_mkdir(&report, cli.json)
+        }
+        Command::Rm(args) => {
+            let report = write_ops::run_rm(
+                cli.device.as_deref(),
+                cli.auto_connect,
+                args.remote_path.as_str(),
+                args.recursive,
+                args.force,
+                args.dry_run,
+            )?;
+            output::write_rm(&report, cli.json)
+        }
+        Command::Rename(args) => {
+            let report = write_ops::run_rename(
+                cli.device.as_deref(),
+                cli.auto_connect,
+                args.remote_path.as_str(),
+                args.new_name.as_str(),
+            )?;
+            output::write_rename(&report, cli.json)
+        }
         Command::Eject => Err(AppError::not_implemented("eject")),
     }
 }
