@@ -157,7 +157,7 @@ Releases are tag-driven and update the Homebrew tap automatically:
 3. Tag the commit as `vX.Y.Z`.
 4. Push the tag.
 
-The GitHub `Release` workflow verifies formatting, check, clippy, tests, and a CLI smoke test, then builds `aarch64-apple-darwin` and `x86_64-apple-darwin` release archives. After publishing the GitHub release, it rewrites `Formula/tp7.rb` in `totocaster/homebrew-tap` with the new artifact URLs and SHA256 sums. The `HOMEBREW_TAP_TOKEN` repository secret must be configured for the tap push.
+The GitHub `Release` workflow verifies formatting, check, clippy, tests, and a CLI smoke test, then builds `aarch64-apple-darwin` and `x86_64-apple-darwin` release archives. It publishes the GitHub release with install instructions, artifact checksums, and conventional-commit changelog notes, then rewrites `Formula/tp7.rb` in `totocaster/homebrew-tap` with the new artifact URLs and SHA256 sums. The `HOMEBREW_TAP_TOKEN` repository secret must be configured for the tap push.
 
 ## License
 
