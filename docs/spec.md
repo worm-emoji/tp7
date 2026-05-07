@@ -244,10 +244,10 @@ Executable name: `tp7`
 
 Global flags:
 
-- `--device <serial>`: select a specific TP-7.
-- `--json`: machine-readable output.
+- `-d, --device <serial>`: select a specific TP-7.
+- `-j, --json`: machine-readable output.
 - `--verbose`: show USB/MTP diagnostic logs.
-- `--auto-connect`: allow file commands to switch into MTP mode automatically.
+- `-a, --auto-connect`: allow file commands to switch into MTP mode automatically.
 - `--no-progress`: disable progress bars for scripts.
 
 ### V1 Commands
@@ -274,8 +274,13 @@ List files/folders. Default path is `/`.
 
 Useful flags:
 
-- `--long`
-- `--ids`
+- `-l, --long`: detailed listing with type, size, and modified time.
+- `-s, --size`: show object sizes in compact output.
+- `--human-readable`: format displayed sizes with units.
+- `-S, --sort-size`: sort by size, largest first.
+- `-t, --sort-time`: sort by modified time, newest first.
+- `-r, --reverse`: reverse listing order.
+- `-i, --ids`: show MTP object IDs.
 - `--json`
 
 `tp7 tree [remote-path]`

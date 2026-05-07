@@ -5,7 +5,7 @@ use crate::connect::ConnectReport;
 use crate::device::{Tp7Device, interface_summary};
 use crate::doctor::{DoctorReport, ProcessConflict};
 use crate::eject::EjectReport;
-use crate::ls::LsReport;
+use crate::ls::{LsEntry, LsReport};
 use crate::pull::{PullReport, PullStatus};
 use crate::push::{PushReport, PushStatus};
 use crate::remote::ObjectKind;
@@ -14,6 +14,23 @@ use crate::status::StatusReport;
 use crate::tree::TreeReport;
 use crate::usb_owner::UsbOwner;
 use crate::write_ops::{MkdirReport, RenameReport, RmReport};
+
+#[derive(Debug, Clone, Copy)]
+pub struct LsDisplayOptions {
+    pub long: bool,
+    pub ids: bool,
+    pub size: bool,
+    pub human_readable: bool,
+    pub sort: LsSort,
+    pub reverse: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LsSort {
+    Name,
+    Size,
+    Time,
+}
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -263,33 +280,42 @@ pub fn write_connect(report: &ConnectReport, json: bool) -> Result<(), AppError>
     Ok(())
 }
 
-pub fn write_ls(report: &LsReport, json: bool, long: bool, ids: bool) -> Result<(), AppError> {
+pub fn write_ls(report: &LsReport, json: bool, options: LsDisplayOptions) -> Result<(), AppError> {
     if json {
         write_json(report)?;
         return Ok(());
     }
 
-    for entry in &report.entries {
-        let name = ls_display_name(entry.name.as_str(), &entry.kind);
+    let mut entries = report.entries.clone();
+    sort_ls_entries(&mut entries, options.sort);
+    if options.reverse {
+        entries.reverse();
+    }
 
-        match (long, ids) {
-            (true, true) => println!(
+    for entry in &entries {
+        let name = ls_display_name(entry.name.as_str(), &entry.kind);
+        let size = ls_size_label(entry.size, options.human_readable);
+
+        match (options.long, options.ids, options.size) {
+            (true, true, _) => println!(
                 "{:>10} {:<6} {:>12} {:<15} {}",
                 entry.id,
                 ls_kind_label(&entry.kind),
-                entry.size,
+                size,
                 entry.modified.as_deref().unwrap_or("-"),
                 name
             ),
-            (true, false) => println!(
+            (true, false, _) => println!(
                 "{:<6} {:>12} {:<15} {}",
                 ls_kind_label(&entry.kind),
-                entry.size,
+                size,
                 entry.modified.as_deref().unwrap_or("-"),
                 name
             ),
-            (false, true) => println!("{:>10} {}", entry.id, name),
-            (false, false) => println!("{name}"),
+            (false, true, true) => println!("{:>10} {:>12} {}", entry.id, size, name),
+            (false, true, false) => println!("{:>10} {}", entry.id, name),
+            (false, false, true) => println!("{:>12} {}", size, name),
+            (false, false, false) => println!("{name}"),
         }
     }
 
@@ -526,6 +552,49 @@ fn ls_display_name(name: &str, kind: &ObjectKind) -> String {
     match kind {
         ObjectKind::File => name.to_string(),
         ObjectKind::Folder => format!("{name}/"),
+    }
+}
+
+fn sort_ls_entries(entries: &mut [LsEntry], sort: LsSort) {
+    match sort {
+        LsSort::Name => {}
+        LsSort::Size => entries.sort_by(|left, right| {
+            right
+                .size
+                .cmp(&left.size)
+                .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+                .then_with(|| left.name.cmp(&right.name))
+        }),
+        LsSort::Time => entries.sort_by(|left, right| {
+            right
+                .modified
+                .cmp(&left.modified)
+                .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+                .then_with(|| left.name.cmp(&right.name))
+        }),
+    }
+}
+
+fn ls_size_label(size: u64, human_readable: bool) -> String {
+    if !human_readable {
+        return size.to_string();
+    }
+
+    const UNITS: [&str; 5] = ["B", "K", "M", "G", "T"];
+    let mut value = size as f64;
+    let mut unit = 0;
+
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+
+    if unit == 0 {
+        format!("{size}{}", UNITS[unit])
+    } else if value >= 10.0 {
+        format!("{value:.0}{}", UNITS[unit])
+    } else {
+        format!("{value:.1}{}", UNITS[unit])
     }
 }
 

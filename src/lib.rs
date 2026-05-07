@@ -45,12 +45,36 @@ pub fn run() -> Result<(), AppError> {
             output::write_connect(&report, cli.json)
         }
         Command::Ls(args) => {
+            if args.sort_size && args.sort_time {
+                return Err(AppError::InvalidArguments {
+                    message: "choose either --sort-size or --sort-time".to_string(),
+                });
+            }
+
             let report = ls::run_ls(
                 cli.device.as_deref(),
                 cli.auto_connect,
                 args.remote_path.as_str(),
             )?;
-            output::write_ls(&report, cli.json, args.long, args.ids)
+            let sort = if args.sort_size {
+                output::LsSort::Size
+            } else if args.sort_time {
+                output::LsSort::Time
+            } else {
+                output::LsSort::Name
+            };
+            output::write_ls(
+                &report,
+                cli.json,
+                output::LsDisplayOptions {
+                    long: args.long,
+                    ids: args.ids,
+                    size: args.size,
+                    human_readable: args.human_readable,
+                    sort,
+                    reverse: args.reverse,
+                },
+            )
         }
         Command::Tree(args) => {
             let report = tree::run_tree(

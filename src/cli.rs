@@ -8,13 +8,25 @@ use clap::{Args, Parser, Subcommand};
 )]
 #[command(arg_required_else_help = true)]
 pub struct Cli {
-    #[arg(long, global = true, help = "Select a TP-7 by serial number")]
+    #[arg(
+        short = 'd',
+        long,
+        global = true,
+        value_name = "SERIAL",
+        help = "Select a TP-7 by serial number"
+    )]
     pub device: Option<String>,
 
-    #[arg(long, global = true, help = "Write machine-readable JSON output")]
+    #[arg(
+        short = 'j',
+        long,
+        global = true,
+        help = "Write machine-readable JSON output"
+    )]
     pub json: bool,
 
     #[arg(
+        short = 'a',
         long,
         global = true,
         help = "Allow commands to switch the device into MTP mode automatically"
@@ -75,7 +87,7 @@ pub enum Command {
     #[command(about = "Rename a remote object without moving it")]
     Rename(RenameArgs),
 
-    #[command(about = "Close the MTP session cleanly")]
+    #[command(about = "Open and close an MTP session cleanly")]
     Eject,
 }
 
@@ -84,11 +96,30 @@ pub struct LsArgs {
     #[arg(default_value = "/")]
     pub remote_path: String,
 
-    #[arg(long)]
+    #[arg(short = 'l', long, help = "Use a detailed listing")]
     pub long: bool,
 
-    #[arg(long)]
+    #[arg(short = 'i', long, help = "Show MTP object IDs")]
     pub ids: bool,
+
+    #[arg(short = 's', long, help = "Show object sizes in the compact listing")]
+    pub size: bool,
+
+    #[arg(short = 'S', long = "sort-size", help = "Sort by size, largest first")]
+    pub sort_size: bool,
+
+    #[arg(
+        short = 't',
+        long = "sort-time",
+        help = "Sort by modification time, newest first"
+    )]
+    pub sort_time: bool,
+
+    #[arg(short = 'r', long, help = "Reverse the listing order")]
+    pub reverse: bool,
+
+    #[arg(long, help = "Format displayed sizes in human-readable units")]
+    pub human_readable: bool,
 }
 
 #[derive(Debug, Args)]
