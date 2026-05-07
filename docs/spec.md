@@ -358,7 +358,7 @@ reverse mode-switch command is discovered later, this can optionally use it.
 
 `tp7 mount [mountpoint]`
 
-Mount the TP-7 as a read-only Finder-visible filesystem. The command keeps
+Mount the TP-7 as a read-write Finder-visible filesystem. The command keeps
 running as the userspace filesystem server. If the user unmounts the volume
 from Finder, `diskutil`, or `umount`, the command exits cleanly and does not
 depend on stored CLI state.
@@ -374,7 +374,11 @@ Implementation notes:
 - The implementation uses the same TP-7 MTP mode switch and open-session path
   as the direct file commands, then hands the opened MTP device to a FUSE
   filesystem for the lifetime of the mount.
-- The mounted filesystem is read-only for the initial implementation.
+- The mounted filesystem is read-write by default. `--read-only` keeps the mount
+  inspection-only.
+- TP-7 firmware `1.1.9` rejected MTP folder creation in direct CLI smoke tests,
+  so Finder folder creation can fail even while file copy, overwrite, rename,
+  and delete are writable.
 
 `tp7 unmount [mountpoint]`
 
@@ -385,12 +389,6 @@ unmounts the single mounted TP-7 volume. With an explicit path, it runs
 it reports that without treating it as a CLI state error.
 
 ### Future Commands
-
-`tp7 mount <mountpoint> --read-write`
-
-Read-write mount with local write staging and upload-on-close semantics. This
-remains future work until TP-7 folder creation, Finder write patterns, and
-large-file replacement behavior are validated carefully.
 
 `tp7 sync <remote-path> <local-path>`
 
@@ -426,7 +424,8 @@ Current choices:
 - Retry transient CoreMIDI endpoint discovery during `--auto-connect` for the
   same 12-second window used for MTP visibility because the USB device can
   reappear before its MIDI endpoints are ready.
-- Keep Finder mounting read-only until write semantics are validated.
+- Make Finder mounting read-write by default, with `--read-only` available for
+  inspection-only sessions.
 
 ## Implementation Plan
 
@@ -511,12 +510,12 @@ Deliverable:
 
 ### Phase 7: Mount
 
-Prototype a read-only FUSE mount after the direct MTP CLI is stable.
+Prototype a FUSE mount after the direct MTP CLI is stable.
 
 Deliverable:
 
 - `tp7 mount [mountpoint]` using `fuser`/`mtp-mount`
-- Finder-visible read-only volume
+- Finder-visible read-write volume with `--read-only` support
 - stateless `tp7 unmount [mountpoint]` wrapper
 
 ## Risks

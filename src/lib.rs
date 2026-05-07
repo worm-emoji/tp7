@@ -159,6 +159,7 @@ pub fn run() -> Result<(), AppError> {
                 cli.device.as_deref(),
                 cli.auto_connect,
                 args.mountpoint.as_deref(),
+                args.read_only,
                 !args.no_open,
                 !cli.json,
             )?;

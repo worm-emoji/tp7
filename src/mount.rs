@@ -38,6 +38,7 @@ pub fn run_mount(
     serial: Option<&str>,
     auto_connect: bool,
     mountpoint: Option<&str>,
+    read_only: bool,
     open_finder: bool,
     human_status: bool,
 ) -> Result<MountReport, AppError> {
@@ -64,7 +65,7 @@ pub fn run_mount(
     let initial_mode = prepared.initial_usb.mode.clone();
     let final_mode = prepared.usb.mode.clone();
 
-    let mtp_fs = MtpFs::new(device, true, runtime.handle().clone());
+    let mtp_fs = MtpFs::new(device, read_only, runtime.handle().clone());
     let mut config = Config::default();
     config.mount_options = mount_options(&mtp_fs, &prepared.usb);
 
@@ -83,7 +84,8 @@ pub fn run_mount(
     };
 
     if human_status {
-        println!("mounted TP-7 at {mountpoint_label} (read-only)");
+        let access_mode = if read_only { "read-only" } else { "read-write" };
+        println!("mounted TP-7 at {mountpoint_label} ({access_mode})");
         println!("unmount from Finder or run: tp7 unmount {mountpoint_label}");
         let _ = io::stdout().flush();
     }
@@ -104,7 +106,7 @@ pub fn run_mount(
         serial_number,
         initial_mode,
         final_mode,
-        read_only: true,
+        read_only,
         opened_finder,
         message,
     })

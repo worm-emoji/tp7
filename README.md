@@ -44,7 +44,7 @@ push     Upload a file or directory to the TP-7
 mkdir    Create a remote folder
 rm       Delete a remote file or folder
 rename   Rename a remote object without moving it
-mount    Mount the TP-7 as a read-only Finder filesystem
+mount    Mount the TP-7 as a Finder filesystem
 unmount  Unmount a mounted TP-7 filesystem
 eject    Open and close an MTP session cleanly
 ```
@@ -95,7 +95,9 @@ The TP-7 firmware tested here (`1.1.9`) accepts file upload, rename, delete, and
 - `push --recursive` uploads into an existing remote folder tree only.
 - Missing remote folders are detected before any recursive upload starts.
 
-Finder mounting is read-only in the first implementation. By default `tp7 mount` uses `/Volumes/TP-7`, creating it when permissions allow. If `/Volumes/TP-7` is already in use, it tries `/Volumes/TP-7-2`, `/Volumes/TP-7-3`, and so on. You can also pass your own empty directory.
+Finder mounting is read-write by default. By default `tp7 mount` uses `/Volumes/TP-7`, creating it when permissions allow. If `/Volumes/TP-7` is already in use, it tries `/Volumes/TP-7-2`, `/Volumes/TP-7-3`, and so on. You can also pass your own empty directory or use `--read-only` for an inspection-only mount.
+
+Because TP-7 firmware `1.1.9` rejects MTP folder creation, creating folders from Finder may fail even though file copy, overwrite, rename, and delete use writable MTP operations.
 
 ## Local requirements
 
