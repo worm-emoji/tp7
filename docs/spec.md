@@ -313,6 +313,11 @@ Useful flags:
 - `--overwrite`
 - `--dry-run`
 
+Current directory upload is intentionally conservative: `--recursive` uploads
+files into an existing remote folder tree. It does not create missing remote
+folders because TP-7 firmware `1.1.9` rejected MTP folder creation during
+hardware testing.
+
 `tp7 mkdir <remote-path>`
 
 Create a folder.
@@ -445,7 +450,7 @@ Implement downloads first, then uploads.
 Deliverable:
 
 - `tp7 pull` (implemented for files and recursive folders, with `--dry-run`, `--overwrite`, and `--skip-existing`)
-- `tp7 push` (implemented for files, with `--dry-run` and `--overwrite`; directory upload is still deferred)
+- `tp7 push` (implemented for files and existing-folder recursive directory uploads, with `--dry-run` and staged `--overwrite`)
 - progress reporting
 - skip/overwrite behavior
 

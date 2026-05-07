@@ -148,3 +148,9 @@ What each step taught us:
   flow.
 - TP-7 firmware `1.1.9` accepted file upload, rename, and delete in smoke tests,
   but rejected folder creation with MTP `GeneralError`.
+- `push --overwrite` stages a replacement under a temporary remote name before
+  it renames the old object out of the way, so the original file remains intact
+  until the replacement upload succeeds.
+- Recursive `push` only writes into remote folders that already exist. Missing
+  remote folders remain unsupported until we find a reliable TP-7 folder-create
+  path.
