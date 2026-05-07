@@ -56,7 +56,7 @@ pub fn prepare_mtp_device(
     serial: Option<&str>,
     policy: MtpOpenPolicy,
 ) -> Result<PreparedMtpDevice, AppError> {
-    let initial_usb = select_one_device(list_tp7_devices()?, serial)?;
+    let initial_usb = wait_for_tp7_device(serial, Duration::from_secs(4))?;
 
     if is_mtp_visible(&initial_usb) {
         return Ok(PreparedMtpDevice {
@@ -90,7 +90,7 @@ pub fn prepare_mtp_device(
         }
     }
 
-    let midi_switch = switch_tp7_to_mtp(&initial_usb)?;
+    let midi_switch = switch_tp7_to_mtp_with_retry(&initial_usb, Duration::from_secs(12))?;
     let usb = wait_for_mtp(&initial_usb, serial, Duration::from_secs(12))?;
 
     Ok(PreparedMtpDevice {
@@ -99,6 +99,20 @@ pub fn prepare_mtp_device(
         switched: true,
         midi_switch: Some(midi_switch),
     })
+}
+
+fn wait_for_tp7_device(serial: Option<&str>, timeout: Duration) -> Result<Tp7Device, AppError> {
+    let deadline = Instant::now() + timeout;
+
+    loop {
+        match select_one_device(list_tp7_devices()?, serial) {
+            Ok(device) => return Ok(device),
+            Err(error) if is_transient_device_absence(&error) && Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(250));
+            }
+            Err(error) => return Err(error),
+        }
+    }
 }
 
 pub async fn open_mtp_session(
@@ -147,6 +161,25 @@ pub fn map_mtp_error(error: mtp_rs::Error) -> AppError {
     }
 }
 
+fn switch_tp7_to_mtp_with_retry(
+    device: &Tp7Device,
+    timeout: Duration,
+) -> Result<MidiSwitchReport, AppError> {
+    let deadline = Instant::now() + timeout;
+
+    loop {
+        match switch_tp7_to_mtp(device) {
+            Ok(report) => return Ok(report),
+            Err(error)
+                if is_transient_midi_endpoint_absence(&error) && Instant::now() < deadline =>
+            {
+                thread::sleep(Duration::from_millis(250));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 fn wait_for_mtp(
     initial_device: &Tp7Device,
     serial: Option<&str>,
@@ -180,6 +213,19 @@ fn wait_for_mtp(
 
 fn is_mtp_visible(device: &Tp7Device) -> bool {
     matches!(device.mode, UsbMode::Mtp | UsbMode::Mixed)
+}
+
+fn is_transient_device_absence(error: &AppError) -> bool {
+    matches!(error, AppError::NoDevices | AppError::DeviceNotFound { .. })
+}
+
+fn is_transient_midi_endpoint_absence(error: &AppError) -> bool {
+    matches!(
+        error,
+        AppError::Midi { message }
+            if message.contains("CoreMIDI source endpoint")
+                || message.contains("CoreMIDI destination endpoint")
+    )
 }
 
 fn serial_for_error(device: &Tp7Device) -> String {

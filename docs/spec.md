@@ -316,7 +316,8 @@ Useful flags:
 Current directory upload is intentionally conservative: `--recursive` uploads
 files into an existing remote folder tree. It does not create missing remote
 folders because TP-7 firmware `1.1.9` rejected MTP folder creation during
-hardware testing.
+hardware testing. Recursive push preflights the full local tree before writing
+so missing remote folders or overwrite conflicts fail before any upload starts.
 
 `tp7 mkdir <remote-path>`
 
@@ -342,7 +343,9 @@ Rename an object without moving it.
 
 `tp7 eject`
 
-Close the MTP session cleanly. If the reverse mode-switch command is discovered later, this can optionally return the device to audio/MIDI mode.
+Open and close an MTP session cleanly. This validates that the CLI can release
+the device, but it does not force the TP-7 back to audio/MIDI mode. If the
+reverse mode-switch command is discovered later, this can optionally use it.
 
 ### Future Commands
 
@@ -383,6 +386,11 @@ Current choices:
 - Use POSIX-like remote paths beginning at `/`.
 - Treat multiple storage roots as hidden behind `/` unless the device exposes more than one usable storage.
 - Make destructive operations require explicit paths and support `--dry-run`.
+- Retry initial TP-7 selection briefly because the device can be temporarily
+  absent during USB re-enumeration after a previous MTP session closes.
+- Retry transient CoreMIDI endpoint discovery during `--auto-connect` for the
+  same 12-second window used for MTP visibility because the USB device can
+  reappear before its MIDI endpoints are ready.
 - Keep v1 mount-free.
 
 ## Implementation Plan
@@ -450,7 +458,7 @@ Implement downloads first, then uploads.
 Deliverable:
 
 - `tp7 pull` (implemented for files and recursive folders, with `--dry-run`, `--overwrite`, and `--skip-existing`)
-- `tp7 push` (implemented for files and existing-folder recursive directory uploads, with `--dry-run` and staged `--overwrite`)
+- `tp7 push` (implemented for files and existing-folder recursive directory uploads, with `--dry-run`, staged `--overwrite`, and recursive preflight)
 - progress reporting
 - skip/overwrite behavior
 
@@ -463,6 +471,7 @@ Deliverable:
 - `tp7 mkdir` (command implemented, but TP-7 firmware 1.1.9 rejected folder creation with MTP `GeneralError`)
 - `tp7 rename` (implemented and smoke-tested on a pushed file)
 - `tp7 rm` (implemented and smoke-tested on a pushed file)
+- `tp7 eject` (implemented as MTP open/close validation)
 - dry-run behavior
 
 ### Phase 7: Mount Research

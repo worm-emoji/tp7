@@ -2,6 +2,7 @@ mod cli;
 mod connect;
 mod device;
 mod doctor;
+mod eject;
 mod ls;
 mod midi;
 mod mtp_session;
@@ -128,7 +129,10 @@ pub fn run() -> Result<(), AppError> {
             )?;
             output::write_rename(&report, cli.json)
         }
-        Command::Eject => Err(AppError::not_implemented("eject")),
+        Command::Eject => {
+            let report = eject::run_eject(cli.device.as_deref(), cli.auto_connect)?;
+            output::write_eject(&report, cli.json)
+        }
     }
 }
 

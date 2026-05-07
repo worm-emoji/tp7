@@ -60,6 +60,12 @@ struct RemoteDestination {
     existing: Option<ObjectInfo>,
 }
 
+struct PushPlanItem {
+    local_path: PathBuf,
+    destination: RemoteDestination,
+    size: u64,
+}
+
 pub fn run_push(
     serial: Option<&str>,
     auto_connect: bool,
@@ -156,7 +162,59 @@ async fn write_push_directory(
         total_bytes: 0,
         files: Vec::new(),
     };
-    let mut stack = vec![(local_path.to_path_buf(), root.parent, root.path)];
+    let plan = plan_directory_push(
+        storage,
+        local_path,
+        root.parent,
+        &root.path,
+        options.overwrite,
+    )
+    .await?;
+
+    for item in plan {
+        if options.dry_run {
+            report.files.push(file_report(
+                &item.local_path,
+                &item.destination.path,
+                item.size,
+                PushStatus::DryRun,
+            ));
+        } else {
+            put_file(
+                storage,
+                &item.local_path,
+                &item.destination,
+                item.size,
+                options,
+            )
+            .await?;
+            report.uploaded += 1;
+            report.total_bytes += item.size;
+            report.files.push(file_report(
+                &item.local_path,
+                &item.destination.path,
+                item.size,
+                PushStatus::Uploaded,
+            ));
+        }
+    }
+
+    Ok(report)
+}
+
+async fn plan_directory_push(
+    storage: &Storage,
+    local_root: &Path,
+    remote_parent: Option<ObjectHandle>,
+    remote_parent_path: &str,
+    overwrite: bool,
+) -> Result<Vec<PushPlanItem>, AppError> {
+    let mut plan = Vec::new();
+    let mut stack = vec![(
+        local_root.to_path_buf(),
+        remote_parent,
+        remote_parent_path.to_string(),
+    )];
 
     while let Some((local_dir, remote_parent, remote_parent_path)) = stack.pop() {
         for entry in sorted_directory_entries(&local_dir)? {
@@ -198,30 +256,16 @@ async fn write_push_directory(
                     .await?,
             };
 
-            validate_destination_for_write(&destination, options.overwrite)?;
-            if options.dry_run {
-                report.files.push(file_report(
-                    &entry,
-                    &destination.path,
-                    metadata.len(),
-                    PushStatus::DryRun,
-                ));
-                continue;
-            }
-
-            put_file(storage, &entry, &destination, metadata.len(), options).await?;
-            report.uploaded += 1;
-            report.total_bytes += metadata.len();
-            report.files.push(file_report(
-                &entry,
-                &destination.path,
-                metadata.len(),
-                PushStatus::Uploaded,
-            ));
+            validate_destination_for_write(&destination, overwrite)?;
+            plan.push(PushPlanItem {
+                local_path: entry,
+                destination,
+                size: metadata.len(),
+            });
         }
     }
 
-    Ok(report)
+    Ok(plan)
 }
 
 async fn put_file(

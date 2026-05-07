@@ -4,6 +4,7 @@ use thiserror::Error;
 use crate::connect::ConnectReport;
 use crate::device::{Tp7Device, interface_summary};
 use crate::doctor::{DoctorReport, ProcessConflict};
+use crate::eject::EjectReport;
 use crate::ls::LsReport;
 use crate::pull::{PullReport, PullStatus};
 use crate::push::{PushReport, PushStatus};
@@ -438,6 +439,25 @@ pub fn write_rm(report: &RmReport, json: bool) -> Result<(), AppError> {
         };
         println!("{status} {} ({})", report.path, ls_kind_label(&object.kind));
     }
+
+    Ok(())
+}
+
+pub fn write_eject(report: &EjectReport, json: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    println!(
+        "{}  {} -> {}  {}",
+        report.serial_number.as_deref().unwrap_or("<no-serial>"),
+        report.initial_mode,
+        report.final_mode,
+        report.message
+    );
+    println!("  switched: {}", if report.switched { "yes" } else { "no" });
+    println!("  closed: {}", if report.closed { "yes" } else { "no" });
 
     Ok(())
 }

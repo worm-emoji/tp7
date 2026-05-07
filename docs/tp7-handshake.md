@@ -154,3 +154,12 @@ What each step taught us:
 - Recursive `push` only writes into remote folders that already exist. Missing
   remote folders remain unsupported until we find a reliable TP-7 folder-create
   path.
+- Recursive `push` preflights the whole local tree before upload, so a missing
+  remote folder or overwrite conflict fails before any file is written.
+- `eject` is currently an MTP open/close validation command. It releases the
+  session cleanly but does not send a reverse mode-switch command.
+- The shared session layer retries initial TP-7 selection briefly because the
+  device can disappear for a moment while returning from MTP to audio/MIDI mode.
+- Auto-connect also retries transient CoreMIDI endpoint discovery for up to the
+  same 12-second window used for MTP visibility because USB audio/MIDI mode can
+  appear before the TP-7 MIDI endpoints are ready.
