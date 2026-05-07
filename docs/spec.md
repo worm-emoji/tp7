@@ -297,10 +297,12 @@ Useful flags:
 `tp7 stat <remote-path>`
 
 Show metadata for one object: name, type, size, modified date, object ID, parent ID, and storage ID.
+Human output shows size in readable units plus exact bytes.
 
 `tp7 pull <remote-path> [local-path]`
 
 Download a file or directory from the TP-7.
+Human output shows transferred sizes in readable units plus exact bytes.
 
 Useful flags:
 
@@ -312,6 +314,7 @@ Useful flags:
 `tp7 push <local-path> <remote-path>`
 
 Upload a file or directory to the TP-7.
+Human output shows transferred sizes in readable units plus exact bytes.
 
 Useful flags:
 
@@ -324,6 +327,8 @@ files into an existing remote folder tree. It does not create missing remote
 folders because TP-7 firmware `1.1.9` rejected MTP folder creation during
 hardware testing. Recursive push preflights the full local tree before writing
 so missing remote folders or overwrite conflicts fail before any upload starts.
+Without `--recursive`, local folder input returns a targeted `use --recursive`
+error.
 
 `tp7 mkdir <remote-path>`
 

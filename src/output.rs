@@ -84,7 +84,7 @@ pub enum AppError {
     #[error("local path is a file: {path}")]
     LocalPathIsFile { path: String },
 
-    #[error("local path is a folder; directory upload is not implemented yet: {path}")]
+    #[error("local path is a folder; use --recursive to upload it: {path}")]
     LocalPathIsFolder { path: String },
 
     #[error("remote path already exists; use --overwrite to replace it: {path}")]
@@ -337,7 +337,7 @@ pub fn write_stat(report: &StatReport, json: bool) -> Result<(), AppError> {
     println!("  id: {}", report.object.id);
     println!("  parent: {}", report.object.parent_id);
     println!("  storage: {}", report.object.storage_id);
-    println!("  size: {}", report.object.size);
+    println!("  size: {}", size_with_bytes(report.object.size));
     println!("  format: {} ({})", report.format, report.format_code);
     println!("  created: {}", report.created.as_deref().unwrap_or("-"));
     println!(
@@ -386,15 +386,29 @@ pub fn write_pull(report: &PullReport, json: bool) -> Result<(), AppError> {
     for file in &report.files {
         let status = pull_status_label(&file.status);
         println!(
-            "{status} {} -> {} ({} bytes)",
-            file.remote_path, file.local_path, file.size
+            "{status} {} -> {} ({})",
+            file.remote_path,
+            file.local_path,
+            size_with_bytes(file.size)
         );
     }
 
-    println!(
-        "{} downloaded, {} skipped, {} bytes",
-        report.downloaded, report.skipped, report.total_bytes
-    );
+    if report.dry_run {
+        let planned_bytes = report.files.iter().map(|file| file.size).sum();
+        println!(
+            "{} downloaded, {} skipped, {} would download",
+            report.downloaded,
+            report.skipped,
+            size_with_bytes(planned_bytes)
+        );
+    } else {
+        println!(
+            "{} downloaded, {} skipped, {}",
+            report.downloaded,
+            report.skipped,
+            size_with_bytes(report.total_bytes)
+        );
+    }
 
     Ok(())
 }
@@ -408,12 +422,27 @@ pub fn write_push(report: &PushReport, json: bool) -> Result<(), AppError> {
     for file in &report.files {
         let status = push_status_label(&file.status);
         println!(
-            "{status} {} -> {} ({} bytes)",
-            file.local_path, file.remote_path, file.size
+            "{status} {} -> {} ({})",
+            file.local_path,
+            file.remote_path,
+            size_with_bytes(file.size)
         );
     }
 
-    println!("{} uploaded, {} bytes", report.uploaded, report.total_bytes);
+    if report.dry_run {
+        let planned_bytes = report.files.iter().map(|file| file.size).sum();
+        println!(
+            "{} uploaded, {} would upload",
+            report.uploaded,
+            size_with_bytes(planned_bytes)
+        );
+    } else {
+        println!(
+            "{} uploaded, {}",
+            report.uploaded,
+            size_with_bytes(report.total_bytes)
+        );
+    }
 
     Ok(())
 }
@@ -580,6 +609,18 @@ fn ls_size_label(size: u64, human_readable: bool) -> String {
         return size.to_string();
     }
 
+    human_size(size)
+}
+
+fn size_with_bytes(size: u64) -> String {
+    if size < 1024 {
+        format!("{size} bytes")
+    } else {
+        format!("{} ({size} bytes)", human_size(size))
+    }
+}
+
+fn human_size(size: u64) -> String {
     const UNITS: [&str; 5] = ["B", "K", "M", "G", "T"];
     let mut value = size as f64;
     let mut unit = 0;

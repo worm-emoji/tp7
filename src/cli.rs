@@ -93,7 +93,7 @@ pub enum Command {
 
 #[derive(Debug, Args)]
 pub struct LsArgs {
-    #[arg(default_value = "/")]
+    #[arg(default_value = "/", help = "Remote folder or file path")]
     pub remote_path: String,
 
     #[arg(short = 'l', long, help = "Use a detailed listing")]
@@ -131,78 +131,93 @@ pub struct LsArgs {
 
 #[derive(Debug, Args)]
 pub struct TreeArgs {
-    #[arg(default_value = "/")]
+    #[arg(default_value = "/", help = "Remote folder or file path")]
     pub remote_path: String,
 
-    #[arg(long)]
+    #[arg(long, help = "Limit recursion depth")]
     pub depth: Option<usize>,
 
-    #[arg(long)]
+    #[arg(long, help = "Show MTP object IDs")]
     pub ids: bool,
 }
 
 #[derive(Debug, Args)]
 pub struct RemotePathArgs {
+    #[arg(help = "Remote file or folder path")]
     pub remote_path: String,
 }
 
 #[derive(Debug, Args)]
 pub struct PullArgs {
+    #[arg(help = "Remote file or folder path")]
     pub remote_path: String,
+
+    #[arg(help = "Local destination path")]
     pub local_path: Option<String>,
 
-    #[arg(long)]
+    #[arg(long, help = "Download a remote folder recursively")]
     pub recursive: bool,
 
-    #[arg(long)]
+    #[arg(long, help = "Replace existing local files")]
     pub overwrite: bool,
 
-    #[arg(long)]
+    #[arg(long, help = "Leave existing local files untouched")]
     pub skip_existing: bool,
 
-    #[arg(long)]
+    #[arg(long, help = "Preview downloads without writing files")]
     pub dry_run: bool,
 }
 
 #[derive(Debug, Args)]
 pub struct PushArgs {
+    #[arg(help = "Local file or folder path")]
     pub local_path: String,
+
+    #[arg(help = "Remote destination path")]
     pub remote_path: String,
 
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Upload a local folder into an existing remote folder tree"
+    )]
     pub recursive: bool,
 
-    #[arg(long)]
+    #[arg(long, help = "Replace existing remote files")]
     pub overwrite: bool,
 
-    #[arg(long)]
+    #[arg(long, help = "Preview uploads without writing files")]
     pub dry_run: bool,
 }
 
 #[derive(Debug, Args)]
 pub struct MkdirArgs {
+    #[arg(help = "Remote folder path to create")]
     pub remote_path: String,
 
-    #[arg(long)]
+    #[arg(long, help = "Create missing parent folders if supported")]
     pub parents: bool,
 }
 
 #[derive(Debug, Args)]
 pub struct RmArgs {
+    #[arg(help = "Remote file or folder path to delete")]
     pub remote_path: String,
 
-    #[arg(long)]
+    #[arg(long, help = "Allow deleting a folder")]
     pub recursive: bool,
 
-    #[arg(long)]
+    #[arg(long, help = "Do not fail if the remote path is missing")]
     pub force: bool,
 
-    #[arg(long)]
+    #[arg(long, help = "Preview deletion without removing files")]
     pub dry_run: bool,
 }
 
 #[derive(Debug, Args)]
 pub struct RenameArgs {
+    #[arg(help = "Remote file or folder path to rename")]
     pub remote_path: String,
+
+    #[arg(help = "New name in the same remote folder")]
     pub new_name: String,
 }
