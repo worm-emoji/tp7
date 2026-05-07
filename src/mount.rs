@@ -72,7 +72,7 @@ pub fn run_mount(
     let background = fuser::spawn_mount2(mtp_fs, &mountpoint, &config).map_err(|error| {
         AppError::Mount {
             message: format!(
-                "failed to mount {mountpoint_label}: {error}. Install macFUSE or Fuse-T if no FUSE runtime is available."
+                "failed to mount {mountpoint_label}: {error}. Install macFUSE with `brew install --cask macfuse`; if macOS prompts, approve it in System Settings -> Privacy & Security."
             ),
         }
     })?;

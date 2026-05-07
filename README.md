@@ -104,7 +104,8 @@ Because TP-7 firmware `1.1.9` rejects MTP folder creation, creating folders from
 - macOS
 - A Teenage Engineering TP-7 connected over USB
 - Rust 1.88 or newer for source builds and development
-- For Finder mounting: macFUSE or Fuse-T with FUSE `pkg-config` metadata available at build time and a working FUSE runtime at mount time
+- For Finder mounting: macFUSE at runtime; source builds also need FUSE
+  `pkg-config` metadata available at build time
 
 No Android File Transfer, FieldKit, libmtp, or kernel extension is required for the direct CLI workflow. Finder mounting uses FUSE and is separate from the direct MTP commands.
 
@@ -114,9 +115,13 @@ With Homebrew:
 
 ```sh
 brew tap totocaster/tap
-brew install totocaster/tap/tp7
+brew install --cask totocaster/tap/tp7
 tp7 --version
 ```
+
+The Homebrew cask installs macFUSE as a dependency for Finder mounting. If
+macOS asks you to approve macFUSE in System Settings -> Privacy & Security,
+approve it and rerun `tp7 doctor` or `tp7 -a mount`.
 
 From this repository:
 
@@ -169,7 +174,7 @@ Releases are tag-driven and update the Homebrew tap automatically:
 3. Tag the commit as `vX.Y.Z`.
 4. Push the tag.
 
-The GitHub `Release` workflow verifies formatting, check, clippy, tests, and a CLI smoke test, then builds `aarch64-apple-darwin` and `x86_64-apple-darwin` release archives. It publishes the GitHub release with install instructions, artifact checksums, and conventional-commit changelog notes, then rewrites `Formula/tp7.rb` in `totocaster/homebrew-tap` with the new artifact URLs and SHA256 sums. The `HOMEBREW_TAP_TOKEN` repository secret must be configured for the tap push.
+The GitHub `Release` workflow verifies formatting, check, clippy, tests, and a CLI smoke test, then builds `aarch64-apple-darwin` and `x86_64-apple-darwin` release archives. It publishes the GitHub release with install instructions, artifact checksums, and conventional-commit changelog notes, then rewrites `Casks/tp7.rb` in `totocaster/homebrew-tap` with the new artifact URLs and SHA256 sums. The `HOMEBREW_TAP_TOKEN` repository secret must be configured for the tap push.
 
 ## License
 

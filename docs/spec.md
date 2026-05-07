@@ -4,7 +4,11 @@
 
 Build a macOS CLI for Teenage Engineering TP-7 file access.
 
-The first implementation target is a robust Rust-based MTP file manager that can detect the TP-7, switch or validate MTP mode, list files, and transfer recordings. Finder-style mounting is valuable, but should be treated as a later layer because MTP is object-based and macOS mounting requires FUSE infrastructure.
+The implementation target is a robust Rust-based TP-7 file manager that can
+detect the recorder, switch or validate MTP mode, list files, transfer
+recordings, and optionally expose the MTP object store through Finder. Finder
+mounting uses FUSE infrastructure because MTP is object-based and macOS has no
+native Finder-level MTP support.
 
 ## Current Decision
 
@@ -16,7 +20,7 @@ Recommended initial stack:
 - `nusb` indirectly through `mtp-rs` for USB access.
 - `clap` for CLI parsing.
 - `tracing` or `log` for diagnostics.
-- Later: `fuser` plus macFUSE or Fuse-T for filesystem mounting.
+- `fuser` plus macFUSE for Finder filesystem mounting.
 
 Avoid `libmtp` in the first prototype unless `mtp-rs` cannot handle the TP-7 reliably. FieldKit uses `libmtp`, so it remains a proven fallback.
 
@@ -192,7 +196,8 @@ For mounting, macOS requires a FUSE-compatible runtime:
 - macFUSE: mature, but requires kernel extension approval or newer FSKit paths depending on version/macOS.
 - Fuse-T: kext-less, attractive for distribution, but needs validation with Rust FUSE tooling.
 
-V1 should not require FUSE.
+The Homebrew cask should install macFUSE automatically for normal users.
+Source builds still need FUSE development metadata available at build time.
 
 ## Rust Tooling
 
