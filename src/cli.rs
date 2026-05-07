@@ -63,7 +63,7 @@ pub enum Command {
     #[command(about = "Switch or validate TP-7 MTP mode")]
     Connect,
 
-    #[command(about = "List files on the TP-7")]
+    #[command(about = "List files on the TP-7", disable_help_flag = true)]
     Ls(LsArgs),
 
     #[command(about = "Show a recursive file tree")]
@@ -118,8 +118,15 @@ pub struct LsArgs {
     #[arg(short = 'r', long, help = "Reverse the listing order")]
     pub reverse: bool,
 
-    #[arg(long, help = "Format displayed sizes in human-readable units")]
+    #[arg(
+        short = 'h',
+        long,
+        help = "Format displayed sizes in human-readable units"
+    )]
     pub human_readable: bool,
+
+    #[arg(long = "help", action = clap::ArgAction::HelpLong, help = "Print help")]
+    pub help: Option<bool>,
 }
 
 #[derive(Debug, Args)]

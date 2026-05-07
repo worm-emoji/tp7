@@ -276,7 +276,8 @@ Useful flags:
 
 - `-l, --long`: detailed listing with type, size, and modified time.
 - `-s, --size`: show object sizes in compact output.
-- `--human-readable`: format displayed sizes with units.
+- `-h, --human-readable`: format displayed sizes with units. `tp7 ls --help`
+  remains available as long-only help.
 - `-S, --sort-size`: sort by size, largest first.
 - `-t, --sort-time`: sort by modified time, newest first.
 - `-r, --reverse`: reverse listing order.
