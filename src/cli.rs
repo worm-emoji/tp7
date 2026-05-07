@@ -87,6 +87,12 @@ pub enum Command {
     #[command(about = "Rename a remote object without moving it")]
     Rename(RenameArgs),
 
+    #[command(about = "Mount the TP-7 as a read-only Finder filesystem")]
+    Mount(MountArgs),
+
+    #[command(about = "Unmount a mounted TP-7 filesystem")]
+    Unmount(UnmountArgs),
+
     #[command(about = "Open and close an MTP session cleanly")]
     Eject,
 }
@@ -220,4 +226,22 @@ pub struct RenameArgs {
 
     #[arg(help = "New name in the same remote folder")]
     pub new_name: String,
+}
+
+#[derive(Debug, Args)]
+pub struct MountArgs {
+    #[arg(help = "Existing local directory to use as the mount point")]
+    pub mountpoint: String,
+
+    #[arg(long = "no-open", help = "Do not open the mounted volume in Finder")]
+    pub no_open: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct UnmountArgs {
+    #[arg(help = "Local mount point to unmount")]
+    pub mountpoint: String,
+
+    #[arg(short, long, help = "Force the OS unmount")]
+    pub force: bool,
 }

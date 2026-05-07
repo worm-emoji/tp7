@@ -1,6 +1,6 @@
 # TP-7 CLI
 
-`tp7` is a macOS command-line tool for browsing and moving files on a Teenage Engineering TP-7 field recorder without relying on FieldKit, Android File Transfer, or Finder mounting.
+`tp7` is a macOS command-line tool for browsing and moving files on a Teenage Engineering TP-7 field recorder without relying on FieldKit or Android File Transfer. Direct file commands need no Finder mount; optional Finder mounting is available for source builds with FUSE support enabled.
 
 The TP-7 normally appears as a USB audio/MIDI device. `tp7` can send the device-specific MIDI mode switch, wait for the recorder to re-enumerate as MTP, open a direct MTP session, perform the file operation, and close the session again.
 
@@ -21,11 +21,14 @@ tp7 -a pull /recordings ./recordings --recursive --skip-existing
 tp7 -a push ./clip.wav /memo/clip.wav --dry-run
 tp7 -a push ./clip.wav /memo/clip.wav --overwrite
 tp7 -a rm /memo/clip.wav --dry-run
+mkdir -p ~/TP-7
+tp7 -a mount ~/TP-7
+tp7 unmount ~/TP-7
 ```
 
 For normal use, prefer `-a` / `--auto-connect`. Each command then handles the full TP-7 lifecycle: detect the recorder, switch to MTP if needed, open MTP, do the operation, and close cleanly.
 
-`tp7 connect` and `tp7 eject` are diagnostic/manual-control commands. They are useful for checking whether MTP can be opened and released, but they are not a "mount once, run many commands, eject later" workflow.
+`tp7 connect` and `tp7 eject` are diagnostic/manual-control commands. They are useful for checking whether MTP can be opened and released. For Finder access, use `tp7 mount`; it keeps the MTP session open until Finder, `diskutil`, `umount`, or `tp7 unmount` unmounts the volume.
 
 ## Command surface
 
@@ -42,6 +45,8 @@ push     Upload a file or directory to the TP-7
 mkdir    Create a remote folder
 rm       Delete a remote file or folder
 rename   Rename a remote object without moving it
+mount    Mount the TP-7 as a read-only Finder filesystem
+unmount  Unmount a mounted TP-7 filesystem
 eject    Open and close an MTP session cleanly
 ```
 
@@ -91,15 +96,16 @@ The TP-7 firmware tested here (`1.1.9`) accepts file upload, rename, delete, and
 - `push --recursive` uploads into an existing remote folder tree only.
 - Missing remote folders are detected before any recursive upload starts.
 
-This is a direct MTP CLI, not a Finder mount. A future FUSE mount is documented as a separate research track in `docs/spec.md`.
+Finder mounting is read-only in the first implementation. It requires a binary built with the `finder-mount` feature plus macFUSE or Fuse-T development files at build time and a working FUSE runtime at mount time.
 
 ## Local requirements
 
 - macOS
 - A Teenage Engineering TP-7 connected over USB
 - Rust 1.88 or newer for source builds and development
+- Optional for Finder mounting: macFUSE or Fuse-T with FUSE `pkg-config` metadata available
 
-No Android File Transfer, FieldKit, libmtp, or kernel extension is required for the direct CLI workflow.
+No Android File Transfer, FieldKit, libmtp, or kernel extension is required for the direct CLI workflow. Finder mounting uses FUSE and is separate from the direct MTP commands.
 
 ## Install
 
@@ -117,10 +123,17 @@ From this repository:
 cargo install --path . --locked
 ```
 
+To build Finder mount support from source after installing a FUSE runtime:
+
+```sh
+cargo install --path . --locked --features finder-mount
+```
+
 Or during development:
 
 ```sh
 cargo run -- -a ls -lah /
+cargo run --features finder-mount -- -a mount ~/TP-7
 ```
 
 ## Development
@@ -133,6 +146,7 @@ cargo check
 cargo clippy -- -D warnings
 cargo test
 cargo run -- --help
+cargo check --features finder-mount,fuser/macos-no-mount
 ```
 
 When the TP-7 is connected and write behavior changes, run the hardware smoke script. It creates only tiny temporary text files under `/memo` by default:

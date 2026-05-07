@@ -356,15 +356,37 @@ Open and close an MTP session cleanly. This validates that the CLI can release
 the device, but it does not force the TP-7 back to audio/MIDI mode. If the
 reverse mode-switch command is discovered later, this can optionally use it.
 
-### Future Commands
-
 `tp7 mount <mountpoint>`
 
-Mount the TP-7 as a read-only filesystem. Requires macFUSE or Fuse-T.
+Mount the TP-7 as a read-only Finder-visible filesystem. The command keeps
+running as the userspace filesystem server. If the user unmounts the volume
+from Finder, `diskutil`, or `umount`, the command exits cleanly and does not
+depend on stored CLI state.
+
+Implementation notes:
+
+- The mount point must already exist and be a directory.
+- Mount support is gated behind the `finder-mount` Cargo feature because the
+  Rust FUSE stack requires macFUSE/Fuse-T development metadata on macOS.
+- The implementation uses the same TP-7 MTP mode switch and open-session path
+  as the direct file commands, then hands the opened MTP device to a FUSE
+  filesystem for the lifetime of the mount.
+- The mounted filesystem is read-only for the initial implementation.
+
+`tp7 unmount <mountpoint>`
+
+Stateless OS unmount wrapper. It does not read or write PID files or mount
+registries. It inspects the current mount table and runs `diskutil unmount`,
+falling back to `umount`; if the path is already unmounted, it reports that
+without treating it as a CLI state error.
+
+### Future Commands
 
 `tp7 mount <mountpoint> --read-write`
 
-Read-write mount with local write staging and upload-on-close semantics.
+Read-write mount with local write staging and upload-on-close semantics. This
+remains future work until TP-7 folder creation, Finder write patterns, and
+large-file replacement behavior are validated carefully.
 
 `tp7 sync <remote-path> <local-path>`
 
@@ -400,7 +422,7 @@ Current choices:
 - Retry transient CoreMIDI endpoint discovery during `--auto-connect` for the
   same 12-second window used for MTP visibility because the USB device can
   reappear before its MIDI endpoints are ready.
-- Keep v1 mount-free.
+- Keep Finder mounting read-only until write semantics are validated.
 
 ## Implementation Plan
 
@@ -483,14 +505,15 @@ Deliverable:
 - `tp7 eject` (implemented as MTP open/close validation)
 - dry-run behavior
 
-### Phase 7: Mount Research
+### Phase 7: Mount
 
 Prototype a read-only FUSE mount after the direct MTP CLI is stable.
 
 Deliverable:
 
-- decision between macFUSE and Fuse-T
-- read-only `tp7 mount <mountpoint>` prototype
+- `tp7 mount <mountpoint>` source-build feature using `fuser`/`mtp-mount`
+- Finder-visible read-only volume
+- stateless `tp7 unmount <mountpoint>` wrapper
 
 ## Risks
 
@@ -516,7 +539,10 @@ Library risk:
 
 Mount risk:
 
-- Finder-style mounting is a separate product surface with caching, partial writes, metadata, and macOS FUSE distribution concerns.
+- Finder-style mounting is a separate product surface with caching, metadata,
+  macOS FUSE distribution concerns, and a build-time FUSE metadata dependency.
+- Read-write Finder mounting remains risky because Finder write patterns and
+  MTP object-write semantics do not match normal block filesystem behavior.
 
 ## References
 
