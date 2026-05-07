@@ -100,6 +100,19 @@ pub fn filter_by_serial(
     Ok(filtered)
 }
 
+pub fn select_one_device(
+    devices: Vec<Tp7Device>,
+    serial: Option<&str>,
+) -> Result<Tp7Device, AppError> {
+    let devices = filter_by_serial(devices, serial)?;
+
+    match devices.len() {
+        0 => Err(AppError::NoDevices),
+        1 => Ok(devices.into_iter().next().expect("one device exists")),
+        count => Err(AppError::MultipleDevices { count }),
+    }
+}
+
 impl From<DeviceInfo> for Tp7Device {
     fn from(device: DeviceInfo) -> Self {
         let interfaces = device
@@ -369,5 +382,21 @@ mod tests {
         let error = filter_by_serial(devices, Some("B")).unwrap_err();
 
         assert!(matches!(error, AppError::DeviceNotFound { .. }));
+    }
+
+    #[test]
+    fn selects_one_device() {
+        let device = select_one_device(vec![tp7_device(Some("A"))], None).unwrap();
+
+        assert_eq!(device.serial_number.as_deref(), Some("A"));
+    }
+
+    #[test]
+    fn requires_serial_for_multiple_devices() {
+        let devices = vec![tp7_device(Some("A")), tp7_device(Some("B"))];
+
+        let error = select_one_device(devices, None).unwrap_err();
+
+        assert!(matches!(error, AppError::MultipleDevices { count: 2 }));
     }
 }

@@ -1,6 +1,7 @@
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::connect::ConnectReport;
 use crate::device::{Tp7Device, interface_summary};
 use crate::doctor::{DoctorReport, ProcessConflict};
 
@@ -14,6 +15,15 @@ pub enum AppError {
 
     #[error("no TP-7 device with serial {serial} was found")]
     DeviceNotFound { serial: String },
+
+    #[error("no TP-7 devices were found")]
+    NoDevices,
+
+    #[error("found {count} TP-7 devices; rerun with --device <serial>")]
+    MultipleDevices { count: usize },
+
+    #[error("TP-7 {serial} is in {mode} mode; automatic MTP switching is not implemented yet")]
+    MtpNotVisible { serial: String, mode: String },
 
     #[error("JSON output failed: {source}")]
     Json { source: serde_json::Error },
@@ -32,9 +42,12 @@ impl AppError {
     pub fn exit_code(&self) -> i32 {
         match self {
             AppError::NotImplemented { .. } => 2,
+            AppError::MtpNotVisible { .. } => 3,
             AppError::UsbEnumeration { .. }
             | AppError::ProcessInspection { .. }
             | AppError::DeviceNotFound { .. }
+            | AppError::NoDevices
+            | AppError::MultipleDevices { .. }
             | AppError::Json { .. } => 1,
         }
     }
@@ -78,6 +91,22 @@ pub fn write_devices(devices: &[Tp7Device], json: bool) -> Result<(), AppError> 
         }
         println!("  interfaces: {}", interface_summary(&device.interfaces));
     }
+
+    Ok(())
+}
+
+pub fn write_connect(report: &ConnectReport, json: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    println!(
+        "{}  {}  {}",
+        report.serial_number.as_deref().unwrap_or("<no-serial>"),
+        report.mode,
+        report.message
+    );
 
     Ok(())
 }

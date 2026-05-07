@@ -1,4 +1,5 @@
 mod cli;
+mod connect;
 mod device;
 mod doctor;
 mod output;
@@ -24,7 +25,10 @@ pub fn run() -> Result<(), AppError> {
             output::write_doctor(&report, cli.json)
         }
         Command::Status => Err(AppError::not_implemented("status")),
-        Command::Connect => Err(AppError::not_implemented("connect")),
+        Command::Connect => {
+            let report = connect::run_connect(cli.device.as_deref())?;
+            output::write_connect(&report, cli.json)
+        }
         Command::Ls { .. } => Err(AppError::not_implemented("ls")),
         Command::Tree { .. } => Err(AppError::not_implemented("tree")),
         Command::Stat { .. } => Err(AppError::not_implemented("stat")),
