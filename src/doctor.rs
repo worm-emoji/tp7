@@ -3,12 +3,14 @@ use std::process::Command;
 
 use crate::device::{Tp7Device, UsbMode, filter_by_serial, list_tp7_devices};
 use crate::output::AppError;
+use crate::usb_owner::{UsbOwner, inspect_tp7_usb_owners, is_conflicting_owner};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DoctorReport {
     pub devices: Vec<Tp7Device>,
     pub checks: Vec<DoctorCheck>,
     pub process_conflicts: Vec<ProcessConflict>,
+    pub usb_owners: Vec<UsbOwner>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -48,6 +50,7 @@ pub fn run_doctor(serial: Option<&str>) -> Result<DoctorReport, AppError> {
     let devices = list_tp7_devices()?;
     let devices = filter_by_serial(devices, serial)?;
     let process_conflicts = find_process_conflicts().unwrap_or_default();
+    let usb_owners = inspect_tp7_usb_owners().unwrap_or_default();
     let mut checks = Vec::new();
 
     if devices.is_empty() {
@@ -91,6 +94,38 @@ pub fn run_doctor(serial: Option<&str>) -> Result<DoctorReport, AppError> {
         });
     }
 
+    let conflicting_usb_owners = usb_owners
+        .iter()
+        .filter(|owner| is_conflicting_owner(owner))
+        .count();
+
+    if usb_owners.is_empty() {
+        checks.push(DoctorCheck {
+            status: CheckStatus::Ok,
+            name: "usb-owners".to_string(),
+            message: "No macOS USB owner records were reported for TP-7.".to_string(),
+        });
+    } else if conflicting_usb_owners == 0 {
+        checks.push(DoctorCheck {
+            status: CheckStatus::Ok,
+            name: "usb-owners".to_string(),
+            message: format!(
+                "macOS reports {} TP-7 USB owner record(s); none are known MTP companion app conflicts.",
+                usb_owners.len()
+            ),
+        });
+    } else {
+        checks.push(DoctorCheck {
+            status: CheckStatus::Warn,
+            name: "usb-owners".to_string(),
+            message: format!(
+                "macOS reports {} TP-7 USB owner record(s), including {} likely companion app conflict(s).",
+                usb_owners.len(),
+                conflicting_usb_owners
+            ),
+        });
+    }
+
     checks.push(DoctorCheck {
         status: CheckStatus::Ok,
         name: "implementation-dependency".to_string(),
@@ -101,6 +136,7 @@ pub fn run_doctor(serial: Option<&str>) -> Result<DoctorReport, AppError> {
         devices,
         checks,
         process_conflicts,
+        usb_owners,
     })
 }
 
@@ -187,6 +223,10 @@ fn conflict_reason(command: &str, args: &str) -> Option<String> {
 
     if haystack.contains("fieldkit.app") || haystack.contains("/fieldkit") {
         return Some("FieldKit may own the TP-7 USB device while it is open.".to_string());
+    }
+
+    if haystack.contains("/applications/dia.app/contents/macos/dia") {
+        return Some("Dia may own the TP-7 USB device while it is open.".to_string());
     }
 
     if haystack.contains("android file transfer") || haystack.contains("android-file-transfer") {

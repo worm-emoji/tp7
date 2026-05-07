@@ -155,9 +155,7 @@ impl From<DeviceInfo> for Tp7Device {
 }
 
 pub fn infer_usb_mode(interfaces: &[UsbInterface]) -> UsbMode {
-    let has_mtp = interfaces
-        .iter()
-        .any(|interface| interface.class == 0x06 && interface.subclass == 0x01);
+    let has_mtp = interfaces.iter().any(is_mtp_interface);
     let has_mass_storage = interfaces.iter().any(|interface| interface.class == 0x08);
     let has_audio = interfaces.iter().any(|interface| interface.class == 0x01);
     let has_midi = interfaces
@@ -171,6 +169,16 @@ pub fn infer_usb_mode(interfaces: &[UsbInterface]) -> UsbMode {
         (true, _, _) | (_, true, true) => UsbMode::Mixed,
         _ => UsbMode::Unknown,
     }
+}
+
+fn is_mtp_interface(interface: &UsbInterface) -> bool {
+    let name = interface.name.as_deref().unwrap_or("").to_lowercase();
+
+    (interface.class == 0x06 && interface.subclass == 0x01)
+        || (interface.class == 0xff
+            && interface.subclass == 0x01
+            && interface.protocol == 0x01
+            && (name.contains("mtp") || name.contains("tetp")))
 }
 
 pub fn interface_summary(interfaces: &[UsbInterface]) -> String {
@@ -356,6 +364,14 @@ mod tests {
         let interfaces = vec![interface(0x06, 0x01, 0x01)];
 
         assert_eq!(infer_usb_mode(&interfaces), UsbMode::Mtp);
+    }
+
+    #[test]
+    fn infers_tp7_vendor_mtp_mode() {
+        let mut mtp = interface(0xff, 0x01, 0x01);
+        mtp.name = Some("MTP TETP interface".to_string());
+
+        assert_eq!(infer_usb_mode(&[mtp]), UsbMode::Mtp);
     }
 
     #[test]

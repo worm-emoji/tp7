@@ -2,8 +2,10 @@ mod cli;
 mod connect;
 mod device;
 mod doctor;
+mod midi;
 mod output;
 mod status;
+mod usb_owner;
 
 pub use output::AppError;
 

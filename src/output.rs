@@ -5,6 +5,7 @@ use crate::connect::ConnectReport;
 use crate::device::{Tp7Device, interface_summary};
 use crate::doctor::{DoctorReport, ProcessConflict};
 use crate::status::StatusReport;
+use crate::usb_owner::UsbOwner;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -13,6 +14,9 @@ pub enum AppError {
 
     #[error("process inspection failed: {message}")]
     ProcessInspection { message: String },
+
+    #[error("USB ownership inspection failed: {message}")]
+    UsbOwnershipInspection { message: String },
 
     #[error("no TP-7 device with serial {serial} was found")]
     DeviceNotFound { serial: String },
@@ -23,7 +27,7 @@ pub enum AppError {
     #[error("found {count} TP-7 devices; rerun with --device <serial>")]
     MultipleDevices { count: usize },
 
-    #[error("TP-7 {serial} is in {mode} mode; automatic MTP switching is not implemented yet")]
+    #[error("TP-7 {serial} is in {mode} mode; no MTP-compatible interface is visible")]
     MtpNotVisible { serial: String, mode: String },
 
     #[error("MTP operation failed: {message}")]
@@ -31,6 +35,19 @@ pub enum AppError {
 
     #[error("MTP device is busy or owned by another process: {message}")]
     MtpExclusiveAccess { message: String },
+
+    #[error("MIDI operation failed: {message}")]
+    Midi { message: String },
+
+    #[error("MIDI response timed out: {message}")]
+    MidiTimeout { message: String },
+
+    #[error("MIDI command 0x{command:02x} was rejected with status 0x{status:02x}: {message}")]
+    MidiCommandRejected {
+        command: u8,
+        status: u8,
+        message: String,
+    },
 
     #[error("runtime initialization failed: {message}")]
     Runtime { message: String },
@@ -54,8 +71,12 @@ impl AppError {
             AppError::NotImplemented { .. } => 2,
             AppError::MtpNotVisible { .. } => 3,
             AppError::MtpExclusiveAccess { .. } => 4,
+            AppError::Midi { .. }
+            | AppError::MidiTimeout { .. }
+            | AppError::MidiCommandRejected { .. } => 5,
             AppError::UsbEnumeration { .. }
             | AppError::ProcessInspection { .. }
+            | AppError::UsbOwnershipInspection { .. }
             | AppError::DeviceNotFound { .. }
             | AppError::NoDevices
             | AppError::MultipleDevices { .. }
@@ -145,11 +166,24 @@ pub fn write_connect(report: &ConnectReport, json: bool) -> Result<(), AppError>
     }
 
     println!(
-        "{}  {}  {}",
+        "{}  {} -> {}  {}",
         report.serial_number.as_deref().unwrap_or("<no-serial>"),
-        report.mode,
+        report.initial_mode,
+        report.final_mode,
         report.message
     );
+    println!("  switched: {}", if report.switched { "yes" } else { "no" });
+    println!("  mtp session: {}", report.mtp_session.message);
+    if let Some(storage_count) = report.mtp_session.storage_count {
+        println!("  storages: {storage_count}");
+    }
+    if let Some(midi_switch) = &report.midi_switch {
+        println!(
+            "  midi switch: command 0x{:02x}, payload {}",
+            midi_switch.command,
+            midi_switch.payload.join(" ")
+        );
+    }
 
     Ok(())
 }
@@ -170,6 +204,14 @@ pub fn write_doctor(report: &DoctorReport, json: bool) -> Result<(), AppError> {
         println!("Possible process conflicts:");
         for conflict in &report.process_conflicts {
             print_process_conflict(conflict);
+        }
+    }
+
+    if !report.usb_owners.is_empty() {
+        println!();
+        println!("macOS USB owners:");
+        for owner in &report.usb_owners {
+            print_usb_owner(owner);
         }
     }
 
@@ -203,5 +245,29 @@ fn print_process_conflict(conflict: &ProcessConflict) {
     println!(
         "- pid {}: {} ({})",
         conflict.pid, conflict.name, conflict.reason
+    );
+}
+
+fn print_usb_owner(owner: &UsbOwner) {
+    let pid = owner
+        .pid
+        .map(|pid| pid.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let location = match owner.interface_number {
+        Some(number) => format!(
+            "{} {} ({})",
+            owner.scope,
+            number,
+            owner
+                .interface_name
+                .as_deref()
+                .unwrap_or(owner.scope_node_name.as_str())
+        ),
+        None => format!("{} {}", owner.scope, owner.scope_node_name),
+    };
+
+    println!(
+        "- {} pid {}: {} on {}",
+        owner.kind, pid, owner.process, location
     );
 }

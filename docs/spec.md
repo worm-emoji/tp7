@@ -36,7 +36,7 @@ Device identity:
 - Current USB configuration: `1`
 - Number of USB configurations: `3`
 
-The current mode is not MTP. macOS sees the TP-7 as a composite USB audio/MIDI device:
+Default visible mode is not MTP. macOS sees the TP-7 as a composite USB audio/MIDI device:
 
 - Interface 0: USB Audio Control
 - Interface 1: USB Audio Streaming input
@@ -52,7 +52,15 @@ Current owners:
 
 A descriptor-only libusb probe showed all three available USB configurations expose the same audio/MIDI interface set in the current device mode. No MTP or mass-storage interface was visible at that point.
 
-Important inference: TP-7 probably needs a device-specific mode switch before it re-enumerates as MTP. The MTP interface is not merely hidden in another visible configuration while the device is in audio/MIDI mode.
+Confirmed: TP-7 needs a device-specific MIDI SysEx mode switch before it re-enumerates as MTP. The MTP interface is not merely hidden in another visible configuration while the device is in audio/MIDI mode.
+
+After a successful switch, `nusb` sees:
+
+- Product: `TP-7 MTP Device`
+- Mode inference: `mtp`
+- Interface: vendor-specific `255:1:1`, string `MTP TETP interface`
+
+The TP-7 may return to audio/MIDI mode after a short MTP session closes. File commands should therefore switch, open MTP, perform their work, and close the session as one operation instead of assuming that a previous `tp7 connect` leaves the device in MTP for long.
 
 ## FieldKit Findings
 
@@ -78,9 +86,67 @@ Observed strings and logs indicate:
 
 Practical inference:
 
-FieldKit likely sends a Teenage Engineering-specific MIDI request to switch the TP-7 from audio/MIDI mode into MTP mode, waits for USB re-enumeration, and then opens the re-enumerated MTP device through libmtp/libusb.
+FieldKit sends a Teenage Engineering-specific MIDI request to switch the TP-7 from audio/MIDI mode into MTP mode, waits for USB re-enumeration, and then opens the re-enumerated MTP device through libmtp/libusb.
 
-The exact MIDI mode-switch payload is still unknown.
+The exact mode-switch payload has been validated independently through CoreMIDI and implemented directly in Rust. FieldKit/Dia remain research references only, not runtime dependencies.
+
+## Teenage Engineering SysEx Findings
+
+TP-7 exposes a CoreMIDI source and destination named `TP-7` in audio/MIDI mode.
+
+Device identity request:
+
+- Send universal MIDI identity request: `f0 7e 7f 06 01 f7`
+- Observed response: `f0 7e 19 06 02 00 20 76 19 00 01 00 00 00 00 00 f7`
+- `0x19` is the runtime device id used in the TE SysEx envelope.
+
+TE SysEx envelope:
+
+- Manufacturer id: `00 20 76`
+- TE marker byte: `40`
+- Request with request id flag: `0x60`
+- Response with request id flag: `0x20`
+- Request id: 12 bits split as high 5 bits in the low bits of the flag byte and low 7 bits in the next byte.
+- Payload is TE 8-bit data packed into 7-bit-safe SysEx bytes.
+
+Generic request shape:
+
+```text
+f0 00 20 76 <device-id> 40 <flags> <request-id-low7> <command> <packed-payload> f7
+```
+
+Validated commands:
+
+- `0x01` greet: returns semicolon-separated metadata.
+- `0x04` mode: changes USB mode.
+
+Observed greet request:
+
+```text
+f0 00 20 76 19 40 60 01 01 f7
+```
+
+Observed greet metadata:
+
+```text
+mode:normal;product:TP-7;sw_version:1.1.9;os_version:1.1.9;serial:F1RTL11C;sku:TE025AS001;base_sku:TE025AS001
+```
+
+Validated MTP switch request:
+
+```text
+f0 00 20 76 19 40 60 05 04 00 01 03 f7
+```
+
+That is command `0x04` with unpacked payload `[0x01, 0x03]`. FieldKit also contains a legacy-looking path that can send `[0x01, 0x02]`; keep it as a fallback if `[0x01, 0x03]` receives TE status `0x03` (`bad-request`).
+
+Validated response to the MTP switch:
+
+```text
+f0 00 20 76 19 40 20 05 04 00 f7
+```
+
+Status `0x00` means success. After this response, the device re-enumerates and can be opened via `mtp-rs`.
 
 ## Protocol Findings
 
@@ -143,10 +209,22 @@ Fallback:
 
 Open validation tasks:
 
-- Confirm `mtp-rs` can open the TP-7 once it is in MTP mode.
+- Confirmed: `mtp-rs` can open the TP-7 once it is in MTP mode.
 - Confirm object listing and transfers work with TP-7 recordings.
 - Confirm whether `mtp-rs` exposes all required operations or whether we need small extensions.
 - Confirm whether `nusb` can handle any macOS device ownership edge cases cleanly.
+
+Validated MTP status from `mtp-rs`:
+
+- Manufacturer: `teenage engineering`
+- Model: `TP-7 MTP Device`
+- Device version: `1.1.9`
+- MTP serial: `F1RTL11C`
+- Supports rename: `true`
+- Storage count: `1`
+- Storage id: `65537`
+- Capacity: `120244404224` bytes
+- Free space observed: `112986914816` bytes
 
 ## Go Tooling Considered
 
@@ -291,9 +369,9 @@ Remote copy if TP-7 supports it reliably.
 
 Stream a small remote file to stdout.
 
-## Interface Decisions To Confirm
+## Current Interface Decisions
 
-Before coding, confirm these choices:
+Current choices:
 
 - Keep `tp7 connect` explicit by default.
 - Make `--auto-connect` opt-in for commands like `ls` and `pull`.
@@ -303,6 +381,8 @@ Before coding, confirm these choices:
 - Keep v1 mount-free.
 
 ## Implementation Plan
+
+Phases 0 through 3 now have working prototype coverage: CLI scaffolding, USB detection, diagnostics, CoreMIDI mode switching, and MTP status validation. The next implementation phase is file browsing over an MTP session that is opened immediately after the switch.
 
 ### Phase 0: Baseline Project
 
