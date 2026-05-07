@@ -84,7 +84,6 @@ pub fn is_conflicting_owner(owner: &UsbOwner) -> bool {
 
     process.contains("field kit")
         || process.contains("fieldkit")
-        || process.contains("dia")
         || process.contains("android file transfer")
         || process.contains("openmtp")
         || process.contains("ptpcamerad")
@@ -104,12 +103,15 @@ fn parse_ioreg_usb_owners(output: &str) -> Vec<UsbOwner> {
             let scope_index = nearest_scope_entry(&entries, index);
             let scope_entry = &entries[scope_index];
             let (pid, process) = parse_owner(&owner.raw);
+            let raw = public_owner_raw(&owner.raw, pid, &process);
+            let owner_node_name = public_owner_node_name(&entry.node_name, &process);
+            let process = public_owner_process(&process);
 
             owners.push(UsbOwner {
                 kind: owner.kind.clone(),
                 scope: scope_for_entry(scope_entry),
                 scope_node_name: scope_entry.node_name.clone(),
-                owner_node_name: entry.node_name.clone(),
+                owner_node_name,
                 owner_node_class: entry.node_class.clone(),
                 interface_number: scope_entry.interface_number,
                 interface_name: scope_entry.interface_name.clone(),
@@ -118,7 +120,7 @@ fn parse_ioreg_usb_owners(output: &str) -> Vec<UsbOwner> {
                 interface_protocol: scope_entry.interface_protocol,
                 pid,
                 process,
-                raw: owner.raw.clone(),
+                raw,
             });
         }
     }
@@ -310,6 +312,46 @@ fn parse_owner(raw: &str) -> (Option<u32>, String) {
     }
 }
 
+fn public_owner_process(process: &str) -> String {
+    let process = process.trim();
+
+    if is_known_public_owner_process(process) {
+        process.to_string()
+    } else {
+        "other process".to_string()
+    }
+}
+
+fn public_owner_raw(raw: &str, pid: Option<u32>, process: &str) -> String {
+    if is_known_public_owner_process(process) {
+        raw.to_string()
+    } else if let Some(pid) = pid {
+        format!("pid {pid}, other process")
+    } else {
+        "other process".to_string()
+    }
+}
+
+fn public_owner_node_name(node_name: &str, process: &str) -> String {
+    if is_known_public_owner_process(process) {
+        node_name.to_string()
+    } else {
+        "other process".to_string()
+    }
+}
+
+fn is_known_public_owner_process(process: &str) -> bool {
+    let process = process.to_lowercase();
+
+    matches!(
+        process.as_str(),
+        "midiserver" | "usbaudiod" | "ptpcamerad" | "unknown owner"
+    ) || process.contains("field kit")
+        || process.contains("fieldkit")
+        || process.contains("android file transfer")
+        || process.contains("openmtp")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -365,5 +407,29 @@ mod tests {
 
         assert_eq!(pid, None);
         assert_eq!(process, "unknown owner");
+    }
+
+    #[test]
+    fn redacts_unrecognized_usb_owner_processes() {
+        let output = r#"
++-o TP-7@01100000  <class IOUSBHostDevice, id 0x1000b6528, registered>
+  | {
+  |   "idVendor" = 9063
+  |   "idProduct" = 25
+  | }
+  |
+  +-o companion  <class AppleUSBHostDeviceUserClient, id 0x1000b6537>
+      {
+        "IOUserClientCreator" = "pid 92001, Companion Helper"
+      }
+"#;
+
+        let owners = parse_ioreg_usb_owners(output);
+
+        assert_eq!(owners.len(), 1);
+        assert_eq!(owners[0].pid, Some(92001));
+        assert_eq!(owners[0].process, "other process");
+        assert_eq!(owners[0].raw, "pid 92001, other process");
+        assert_eq!(owners[0].owner_node_name, "other process");
     }
 }

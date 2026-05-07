@@ -17,6 +17,6 @@
   existing TP-7 recordings unless the user explicitly asks; run `tp7 stat`
   first when touching any existing remote file so large notes are identified
   before transfer.
-- Keep the TP-7 CLI independent of installed companion apps. FieldKit and Dia may be used as research references only, not implementation dependencies.
+- Keep the TP-7 CLI independent of installed companion apps. FieldKit and other companion apps may be used as research references only, not implementation dependencies.
 - Keep `docs/spec.md` and `docs/tp7-handshake.md` updated whenever protocol findings, command behavior, supported workflows, or reverse-engineering notes change.
 - Keep CLI behavior aligned with https://clig.dev/: concise human-readable output by default, structured `--json` on stdout, diagnostics/errors on stderr, meaningful non-zero exit codes, helpful `--help`, and plain error messages that suggest the next command when possible.

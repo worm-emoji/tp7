@@ -15,8 +15,8 @@ plugged in. It starts as a USB audio/MIDI device. To access files, the CLI must:
 5. Open an MTP session and operate on files before the device returns to
    audio/MIDI mode.
 
-FieldKit and Dia were useful research references, but the CLI must not depend
-on them at runtime.
+FieldKit was a useful research reference, but the CLI must not depend on it at
+runtime.
 
 ## Runtime Handshake
 
@@ -112,7 +112,7 @@ Storage count: 1
 flowchart TD
     A[USB enumeration] --> B[Confirmed default audio/MIDI mode]
     B --> C[IORegistry ownership checks]
-    C --> D[FieldKit and Dia process behavior]
+    C --> D[FieldKit process behavior]
     D --> E[FieldKit strings and symbols]
     E --> F[TE web updater SysEx format]
     F --> G[CoreMIDI identity and greet probe]
@@ -132,14 +132,14 @@ What each step taught us:
   request IDs, responses, and 7-bit payload packing.
 - CoreMIDI probes proved the TP-7 accepts TE SysEx directly.
 - FieldKit analysis revealed the TP-7 MTP switch command and payload.
-- `mtp-rs` proved the resulting device can be accessed without FieldKit or Dia.
+- `mtp-rs` proved the resulting device can be accessed without FieldKit.
 
 ## CLI Implications
 
 - File commands switch to MTP when `--auto-connect` is set, open a session,
   perform the operation, and close cleanly in one flow.
 - `tp7 status` cannot assume a previous `tp7 connect` left the TP-7 in MTP mode.
-- The CLI should warn when FieldKit, Dia, or other processes own TP-7 interfaces,
+- The CLI should warn when FieldKit or other processes own TP-7 interfaces,
   but it should not require those apps.
 - Newer firmware accepts mode payload `[0x01, 0x03]`. FieldKit suggests
   `[0x01, 0x02]` may be a fallback for older firmware.

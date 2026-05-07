@@ -48,7 +48,6 @@ Current owners:
 - `usbaudiod` owns the audio interfaces.
 - `MIDIServer` owns the MIDI interface and also appears as the device-level exclusive owner.
 - `FieldKit.app` has a USB device user client attached.
-- `Dia.app` also had a USB device user client attached during inspection.
 
 A descriptor-only libusb probe showed all three available USB configurations expose the same audio/MIDI interface set in the current device mode. No MTP or mass-storage interface was visible at that point.
 
@@ -88,7 +87,7 @@ Practical inference:
 
 FieldKit sends a Teenage Engineering-specific MIDI request to switch the TP-7 from audio/MIDI mode into MTP mode, waits for USB re-enumeration, and then opens the re-enumerated MTP device through libmtp/libusb.
 
-The exact mode-switch payload has been validated independently through CoreMIDI and implemented directly in Rust. FieldKit/Dia remain research references only, not runtime dependencies.
+The exact mode-switch payload has been validated independently through CoreMIDI and implemented directly in Rust. FieldKit remains a research reference only, not a runtime dependency.
 
 ## Teenage Engineering SysEx Findings
 
@@ -183,7 +182,6 @@ macOS has no native Finder-level MTP support. Teenage Engineering documents Fiel
 Potential process conflicts:
 
 - FieldKit
-- Dia
 - Android File Transfer or similar MTP apps
 - `ptpcamerad`, if a device re-enumerates as a Still Image/PTP/MTP class device
 
@@ -266,7 +264,7 @@ Switch the TP-7 into MTP mode if needed, wait for re-enumeration, and validate t
 
 `tp7 doctor`
 
-Diagnose common macOS problems: TP-7 not found, FieldKit/Dia/Android File Transfer conflict, MTP mode unavailable, USB permission issues, and later FUSE availability.
+Diagnose common macOS problems: TP-7 not found, FieldKit/Android File Transfer conflict, MTP mode unavailable, USB permission issues, and later FUSE availability.
 
 `tp7 ls [remote-path]`
 

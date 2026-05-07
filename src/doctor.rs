@@ -129,7 +129,7 @@ pub fn run_doctor(serial: Option<&str>) -> Result<DoctorReport, AppError> {
     checks.push(DoctorCheck {
         status: CheckStatus::Ok,
         name: "implementation-dependency".to_string(),
-        message: "This CLI uses direct USB enumeration; FieldKit/Dia are not implementation dependencies.".to_string(),
+        message: "This CLI uses direct USB enumeration; companion apps are not implementation dependencies.".to_string(),
     });
 
     Ok(DoctorReport {
@@ -223,10 +223,6 @@ fn conflict_reason(command: &str, args: &str) -> Option<String> {
 
     if haystack.contains("fieldkit.app") || haystack.contains("/fieldkit") {
         return Some("FieldKit may own the TP-7 USB device while it is open.".to_string());
-    }
-
-    if haystack.contains("/applications/dia.app/contents/macos/dia") {
-        return Some("Dia may own the TP-7 USB device while it is open.".to_string());
     }
 
     if haystack.contains("android file transfer") || haystack.contains("android-file-transfer") {
