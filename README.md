@@ -1,6 +1,6 @@
 # TP-7 CLI
 
-`tp7` is a macOS command-line tool for browsing and moving files on a Teenage Engineering TP-7 field recorder without relying on FieldKit or Android File Transfer. Direct file commands need no Finder mount; optional Finder mounting is available for source builds with FUSE support enabled.
+`tp7` is a macOS command-line tool for browsing and moving files on a Teenage Engineering TP-7 field recorder without relying on FieldKit or Android File Transfer. Direct file commands need no Finder mount; Finder mounting is available when macFUSE or Fuse-T is installed.
 
 The TP-7 normally appears as a USB audio/MIDI device. `tp7` can send the device-specific MIDI mode switch, wait for the recorder to re-enumerate as MTP, open a direct MTP session, perform the file operation, and close the session again.
 
@@ -21,9 +21,8 @@ tp7 -a pull /recordings ./recordings --recursive --skip-existing
 tp7 -a push ./clip.wav /memo/clip.wav --dry-run
 tp7 -a push ./clip.wav /memo/clip.wav --overwrite
 tp7 -a rm /memo/clip.wav --dry-run
-mkdir -p ~/TP-7
-tp7 -a mount ~/TP-7
-tp7 unmount ~/TP-7
+tp7 -a mount
+tp7 unmount
 ```
 
 For normal use, prefer `-a` / `--auto-connect`. Each command then handles the full TP-7 lifecycle: detect the recorder, switch to MTP if needed, open MTP, do the operation, and close cleanly.
@@ -96,14 +95,14 @@ The TP-7 firmware tested here (`1.1.9`) accepts file upload, rename, delete, and
 - `push --recursive` uploads into an existing remote folder tree only.
 - Missing remote folders are detected before any recursive upload starts.
 
-Finder mounting is read-only in the first implementation. It requires a binary built with the `finder-mount` feature plus macFUSE or Fuse-T development files at build time and a working FUSE runtime at mount time.
+Finder mounting is read-only in the first implementation. By default `tp7 mount` uses `/Volumes/TP-7`, creating it when permissions allow. If `/Volumes/TP-7` is already in use, it tries `/Volumes/TP-7-2`, `/Volumes/TP-7-3`, and so on. You can also pass your own empty directory.
 
 ## Local requirements
 
 - macOS
 - A Teenage Engineering TP-7 connected over USB
 - Rust 1.88 or newer for source builds and development
-- Optional for Finder mounting: macFUSE or Fuse-T with FUSE `pkg-config` metadata available
+- For Finder mounting: macFUSE or Fuse-T with FUSE `pkg-config` metadata available at build time and a working FUSE runtime at mount time
 
 No Android File Transfer, FieldKit, libmtp, or kernel extension is required for the direct CLI workflow. Finder mounting uses FUSE and is separate from the direct MTP commands.
 
@@ -123,17 +122,11 @@ From this repository:
 cargo install --path . --locked
 ```
 
-To build Finder mount support from source after installing a FUSE runtime:
-
-```sh
-cargo install --path . --locked --features finder-mount
-```
-
 Or during development:
 
 ```sh
 cargo run -- -a ls -lah /
-cargo run --features finder-mount -- -a mount ~/TP-7
+cargo run -- -a mount
 ```
 
 ## Development
@@ -146,8 +139,11 @@ cargo check
 cargo clippy -- -D warnings
 cargo test
 cargo run -- --help
-cargo check --features finder-mount,fuser/macos-no-mount
 ```
+
+On macOS machines without FUSE development metadata, Rust builds that compile
+the mount code will fail until macFUSE or Fuse-T exposes `fuse.pc` to
+`pkg-config`.
 
 When the TP-7 is connected and write behavior changes, run the hardware smoke script. It creates only tiny temporary text files under `/memo` by default:
 

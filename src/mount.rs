@@ -1,23 +1,19 @@
-#[cfg(any(feature = "finder-mount", test))]
-use std::io;
-#[cfg(feature = "finder-mount")]
-use std::io::Write;
+use std::fs;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[cfg(feature = "finder-mount")]
 use fuser::{Config, MountOption};
-#[cfg(feature = "finder-mount")]
 use mtp_mount::fs::MtpFs;
 use serde::Serialize;
 
-#[cfg(not(feature = "finder-mount"))]
-use crate::device::UsbMode;
-#[cfg(feature = "finder-mount")]
 use crate::device::{Tp7Device, UsbMode};
-#[cfg(feature = "finder-mount")]
 use crate::mtp_session::{MtpOpenPolicy, open_mtp_session};
 use crate::output::AppError;
+
+const DEFAULT_MOUNTPOINT: &str = "/Volumes/TP-7";
+const DEFAULT_MOUNTPOINT_PREFIX: &str = "/Volumes/TP-7";
+const MAX_DEFAULT_MOUNTPOINT_ATTEMPTS: usize = 99;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MountReport {
@@ -41,22 +37,11 @@ pub struct UnmountReport {
 pub fn run_mount(
     serial: Option<&str>,
     auto_connect: bool,
-    mountpoint: &str,
+    mountpoint: Option<&str>,
     open_finder: bool,
     human_status: bool,
 ) -> Result<MountReport, AppError> {
-    run_mount_impl(serial, auto_connect, mountpoint, open_finder, human_status)
-}
-
-#[cfg(feature = "finder-mount")]
-fn run_mount_impl(
-    serial: Option<&str>,
-    auto_connect: bool,
-    mountpoint: &str,
-    open_finder: bool,
-    human_status: bool,
-) -> Result<MountReport, AppError> {
-    let mountpoint = existing_mountpoint_dir(mountpoint)?;
+    let mountpoint = prepare_mountpoint(mountpoint)?;
     let policy = if auto_connect {
         MtpOpenPolicy::AutoSwitch
     } else {
@@ -125,25 +110,11 @@ fn run_mount_impl(
     })
 }
 
-#[cfg(not(feature = "finder-mount"))]
-fn run_mount_impl(
-    _serial: Option<&str>,
-    _auto_connect: bool,
-    mountpoint: &str,
-    _open_finder: bool,
-    _human_status: bool,
-) -> Result<MountReport, AppError> {
-    let _ = existing_mountpoint_dir(mountpoint)?;
-    Err(AppError::Mount {
-        message: "this binary was built without Finder mount support; rebuild with `--features finder-mount` after installing macFUSE or Fuse-T development files".to_string(),
-    })
-}
-
-pub fn run_unmount(mountpoint: &str, force: bool) -> Result<UnmountReport, AppError> {
-    let mountpoint = existing_path(mountpoint)?;
+pub fn run_unmount(mountpoint: Option<&str>, force: bool) -> Result<UnmountReport, AppError> {
+    let mountpoint = resolve_unmount_mountpoint(mountpoint)?;
     let mountpoint_label = path_to_string(&mountpoint);
 
-    if !is_mounted_at(&mountpoint)? {
+    if !is_mounted_at(&mountpoint).map_err(|message| AppError::Unmount { message })? {
         return Ok(UnmountReport {
             mountpoint: mountpoint_label,
             force,
@@ -160,7 +131,7 @@ pub fn run_unmount(mountpoint: &str, force: bool) -> Result<UnmountReport, AppEr
             message: "Unmounted.".to_string(),
         }),
         Err(diskutil_error) => {
-            if !is_mounted_at(&mountpoint)? {
+            if !is_mounted_at(&mountpoint).map_err(|message| AppError::Unmount { message })? {
                 return Ok(UnmountReport {
                     mountpoint: mountpoint_label,
                     force,
@@ -186,7 +157,6 @@ pub fn run_unmount(mountpoint: &str, force: bool) -> Result<UnmountReport, AppEr
     }
 }
 
-#[cfg(feature = "finder-mount")]
 fn mount_options(fs: &MtpFs, device: &Tp7Device) -> Vec<MountOption> {
     let mut options = fs.mount_options();
     options.retain(|option| !matches!(option, MountOption::FSName(_) | MountOption::Subtype(_)));
@@ -202,29 +172,147 @@ fn mount_options(fs: &MtpFs, device: &Tp7Device) -> Vec<MountOption> {
     options
 }
 
-fn existing_mountpoint_dir(path: &str) -> Result<PathBuf, AppError> {
-    let path = existing_path(path)?;
+fn prepare_mountpoint(path: Option<&str>) -> Result<PathBuf, AppError> {
+    match path {
+        Some(path) => prepare_explicit_mountpoint(path),
+        None => prepare_default_mountpoint(),
+    }
+}
+
+fn prepare_explicit_mountpoint(path: &str) -> Result<PathBuf, AppError> {
+    let path = absolute_path(path)?;
+    if !path.exists() {
+        return create_mountpoint_dir(&path, false);
+    }
+
+    let path = canonicalize_path(&path)?;
+    validate_available_mountpoint(&path, false)?;
+    Ok(path)
+}
+
+fn prepare_default_mountpoint() -> Result<PathBuf, AppError> {
+    for index in 1..=MAX_DEFAULT_MOUNTPOINT_ATTEMPTS {
+        let candidate = default_mountpoint_candidate(index);
+        if !candidate.exists() {
+            return create_mountpoint_dir(&candidate, true);
+        }
+
+        let Ok(candidate) = canonicalize_path(&candidate) else {
+            continue;
+        };
+        if validate_available_mountpoint(&candidate, true).is_ok() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(AppError::Mount {
+        message: format!(
+            "no available default mount point found under {DEFAULT_MOUNTPOINT_PREFIX}; pass an explicit mount point"
+        ),
+    })
+}
+
+fn default_mountpoint_candidate(index: usize) -> PathBuf {
+    if index == 1 {
+        PathBuf::from(DEFAULT_MOUNTPOINT)
+    } else {
+        PathBuf::from(format!("{DEFAULT_MOUNTPOINT_PREFIX}-{index}"))
+    }
+}
+
+fn create_mountpoint_dir(path: &Path, default_mountpoint: bool) -> Result<PathBuf, AppError> {
+    fs::create_dir_all(path).map_err(|error| AppError::FileSystem {
+        path: path_to_string(path),
+        message: if default_mountpoint {
+            format!(
+                "could not create default mount point: {error}. Create it with administrator privileges or pass a directory you own"
+            )
+        } else {
+            error.to_string()
+        },
+    })?;
+
+    let path = canonicalize_path(path)?;
+    validate_available_mountpoint(&path, default_mountpoint)?;
+    Ok(path)
+}
+
+fn validate_available_mountpoint(path: &Path, default_mountpoint: bool) -> Result<(), AppError> {
     if !path.is_dir() {
         return Err(AppError::FileSystem {
-            path: path_to_string(&path),
+            path: path_to_string(path),
             message: "mount point must be a directory".to_string(),
         });
     }
 
-    Ok(path)
-}
-
-fn existing_path(path: &str) -> Result<PathBuf, AppError> {
-    let path = absolute_path(path)?;
-    if !path.exists() {
-        return Err(AppError::FileSystem {
-            path: path_to_string(&path),
-            message: "path does not exist".to_string(),
+    if is_mounted_at(path).map_err(|message| AppError::Mount { message })? {
+        return Err(AppError::Mount {
+            message: format!("mount point is already mounted: {}", path.display()),
         });
     }
 
+    if !dir_is_empty(path)? {
+        let message = if default_mountpoint {
+            "default mount point is not empty; trying the next default candidate".to_string()
+        } else {
+            "mount point must be empty".to_string()
+        };
+        return Err(AppError::FileSystem {
+            path: path_to_string(path),
+            message,
+        });
+    }
+
+    Ok(())
+}
+
+fn dir_is_empty(path: &Path) -> Result<bool, AppError> {
+    let mut entries = fs::read_dir(path).map_err(|error| AppError::FileSystem {
+        path: path_to_string(path),
+        message: error.to_string(),
+    })?;
+
+    Ok(entries.next().is_none())
+}
+
+fn resolve_unmount_mountpoint(path: Option<&str>) -> Result<PathBuf, AppError> {
+    match path {
+        Some(path) => resolve_explicit_unmount_mountpoint(path),
+        None => resolve_default_unmount_mountpoint(),
+    }
+}
+
+fn resolve_explicit_unmount_mountpoint(path: &str) -> Result<PathBuf, AppError> {
+    let path = absolute_path(path)?;
+    if !path.exists() {
+        return Ok(path);
+    }
+
+    canonicalize_path(&path)
+}
+
+fn resolve_default_unmount_mountpoint() -> Result<PathBuf, AppError> {
+    let mountpoints = find_tp7_mountpoints().map_err(|message| AppError::Unmount { message })?;
+
+    match mountpoints.as_slice() {
+        [] => Ok(PathBuf::from(DEFAULT_MOUNTPOINT)),
+        [mountpoint] => Ok(mountpoint.clone()),
+        _ => Err(AppError::Unmount {
+            message: format!(
+                "multiple TP-7 mounts found: {}; pass the mount point explicitly",
+                mountpoints
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }),
+    }
+}
+
+fn canonicalize_path(path: &Path) -> Result<PathBuf, AppError> {
     path.canonicalize().map_err(|error| AppError::FileSystem {
-        path: path_to_string(&path),
+        path: path_to_string(path),
         message: error.to_string(),
     })
 }
@@ -243,7 +331,6 @@ fn absolute_path(path: &str) -> Result<PathBuf, AppError> {
         })
 }
 
-#[cfg(feature = "finder-mount")]
 fn open_mountpoint_in_finder(path: &Path, human_status: bool) -> bool {
     #[cfg(target_os = "macos")]
     {
@@ -315,21 +402,26 @@ fn run_unmount_command(mut command: Command) -> Result<(), String> {
     Err(detail)
 }
 
-fn is_mounted_at(path: &Path) -> Result<bool, AppError> {
+fn is_mounted_at(path: &Path) -> Result<bool, String> {
+    let output = read_mount_output()?;
+    Ok(mount_output_has_mountpoint(&output, path))
+}
+
+fn find_tp7_mountpoints() -> Result<Vec<PathBuf>, String> {
+    let output = read_mount_output()?;
+    Ok(mount_output_tp7_mountpoints(&output))
+}
+
+fn read_mount_output() -> Result<String, String> {
     let output = Command::new("mount")
         .output()
-        .map_err(|error| AppError::Unmount {
-            message: format!("failed to inspect mounted filesystems: {error}"),
-        })?;
+        .map_err(|error| format!("failed to inspect mounted filesystems: {error}"))?;
 
     if !output.status.success() {
-        return Err(AppError::Unmount {
-            message: format!("mount exited with {}", output.status),
-        });
+        return Err(format!("mount exited with {}", output.status));
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(mount_output_has_mountpoint(&stdout, path))
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn mount_output_has_mountpoint(output: &str, path: &Path) -> bool {
@@ -337,7 +429,31 @@ fn mount_output_has_mountpoint(output: &str, path: &Path) -> bool {
     output.lines().any(|line| line.contains(&needle))
 }
 
-#[cfg(any(feature = "finder-mount", test))]
+fn mount_output_tp7_mountpoints(output: &str) -> Vec<PathBuf> {
+    output
+        .lines()
+        .filter_map(parse_tp7_mountpoint)
+        .collect::<Vec<_>>()
+}
+
+fn parse_tp7_mountpoint(line: &str) -> Option<PathBuf> {
+    let on_index = line.find(" on ")?;
+    let options_index = line.rfind(" (")?;
+    if options_index <= on_index {
+        return None;
+    }
+
+    let source = &line[..on_index];
+    let mountpoint = &line[on_index + 4..options_index];
+    let options = &line[options_index + 2..];
+
+    if source.starts_with("tp7") && options.contains("mtp") {
+        Some(PathBuf::from(mountpoint))
+    } else {
+        None
+    }
+}
+
 fn is_graceful_mount_end(error: &io::Error) -> bool {
     let message = error.to_string().to_lowercase();
     message.contains("not mounted")
@@ -381,5 +497,18 @@ mod tests {
         let error = io::Error::other("mount point is not mounted");
 
         assert!(is_graceful_mount_end(&error));
+    }
+
+    #[test]
+    fn finds_tp7_mountpoints_in_mount_output() {
+        let output = "/dev/disk3s1 on /System/Volumes/Data (apfs, local)\ntp7:F1RTL11C on /Volumes/TP-7 (mtp, nodev, nosuid, read-only)\ntp7:F2RTL11C on /Volumes/TP-7-2 (mtp, nodev, nosuid, read-only)\n";
+
+        assert_eq!(
+            mount_output_tp7_mountpoints(output),
+            vec![
+                PathBuf::from("/Volumes/TP-7"),
+                PathBuf::from("/Volumes/TP-7-2")
+            ]
+        );
     }
 }

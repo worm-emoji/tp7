@@ -230,8 +230,8 @@ pub struct RenameArgs {
 
 #[derive(Debug, Args)]
 pub struct MountArgs {
-    #[arg(help = "Existing local directory to use as the mount point")]
-    pub mountpoint: String,
+    #[arg(help = "Local mount point; defaults to /Volumes/TP-7")]
+    pub mountpoint: Option<String>,
 
     #[arg(long = "no-open", help = "Do not open the mounted volume in Finder")]
     pub no_open: bool,
@@ -239,8 +239,8 @@ pub struct MountArgs {
 
 #[derive(Debug, Args)]
 pub struct UnmountArgs {
-    #[arg(help = "Local mount point to unmount")]
-    pub mountpoint: String,
+    #[arg(help = "Local mount point to unmount; defaults to the mounted TP-7 volume")]
+    pub mountpoint: Option<String>,
 
     #[arg(short, long, help = "Force the OS unmount")]
     pub force: bool,

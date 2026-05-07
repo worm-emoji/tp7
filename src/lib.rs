@@ -158,14 +158,14 @@ pub fn run() -> Result<(), AppError> {
             let report = mount::run_mount(
                 cli.device.as_deref(),
                 cli.auto_connect,
-                args.mountpoint.as_str(),
+                args.mountpoint.as_deref(),
                 !args.no_open,
                 !cli.json,
             )?;
             output::write_mount(&report, cli.json)
         }
         Command::Unmount(args) => {
-            let report = mount::run_unmount(args.mountpoint.as_str(), args.force)?;
+            let report = mount::run_unmount(args.mountpoint.as_deref(), args.force)?;
             output::write_unmount(&report, cli.json)
         }
         Command::Eject => {

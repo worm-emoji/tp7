@@ -356,7 +356,7 @@ Open and close an MTP session cleanly. This validates that the CLI can release
 the device, but it does not force the TP-7 back to audio/MIDI mode. If the
 reverse mode-switch command is discovered later, this can optionally use it.
 
-`tp7 mount <mountpoint>`
+`tp7 mount [mountpoint]`
 
 Mount the TP-7 as a read-only Finder-visible filesystem. The command keeps
 running as the userspace filesystem server. If the user unmounts the volume
@@ -365,20 +365,24 @@ depend on stored CLI state.
 
 Implementation notes:
 
-- The mount point must already exist and be a directory.
-- Mount support is gated behind the `finder-mount` Cargo feature because the
-  Rust FUSE stack requires macFUSE/Fuse-T development metadata on macOS.
+- With no mount point, the CLI uses `/Volumes/TP-7`. If that path is already
+  mounted or unavailable, it tries numbered siblings such as `/Volumes/TP-7-2`.
+- An explicit mount point is created when missing, but must be an empty
+  directory before mounting.
+- The Rust FUSE stack requires macFUSE/Fuse-T development metadata at build
+  time on macOS and a working FUSE runtime at mount time.
 - The implementation uses the same TP-7 MTP mode switch and open-session path
   as the direct file commands, then hands the opened MTP device to a FUSE
   filesystem for the lifetime of the mount.
 - The mounted filesystem is read-only for the initial implementation.
 
-`tp7 unmount <mountpoint>`
+`tp7 unmount [mountpoint]`
 
 Stateless OS unmount wrapper. It does not read or write PID files or mount
-registries. It inspects the current mount table and runs `diskutil unmount`,
-falling back to `umount`; if the path is already unmounted, it reports that
-without treating it as a CLI state error.
+registries. With no mount point, it inspects the current mount table and
+unmounts the single mounted TP-7 volume. With an explicit path, it runs
+`diskutil unmount`, falling back to `umount`; if the path is already unmounted,
+it reports that without treating it as a CLI state error.
 
 ### Future Commands
 
@@ -511,9 +515,9 @@ Prototype a read-only FUSE mount after the direct MTP CLI is stable.
 
 Deliverable:
 
-- `tp7 mount <mountpoint>` source-build feature using `fuser`/`mtp-mount`
+- `tp7 mount [mountpoint]` using `fuser`/`mtp-mount`
 - Finder-visible read-only volume
-- stateless `tp7 unmount <mountpoint>` wrapper
+- stateless `tp7 unmount [mountpoint]` wrapper
 
 ## Risks
 
