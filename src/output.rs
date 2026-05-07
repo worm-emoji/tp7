@@ -4,6 +4,7 @@ use thiserror::Error;
 use crate::connect::ConnectReport;
 use crate::device::{Tp7Device, interface_summary};
 use crate::doctor::{DoctorReport, ProcessConflict};
+use crate::status::StatusReport;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -25,6 +26,15 @@ pub enum AppError {
     #[error("TP-7 {serial} is in {mode} mode; automatic MTP switching is not implemented yet")]
     MtpNotVisible { serial: String, mode: String },
 
+    #[error("MTP operation failed: {message}")]
+    Mtp { message: String },
+
+    #[error("MTP device is busy or owned by another process: {message}")]
+    MtpExclusiveAccess { message: String },
+
+    #[error("runtime initialization failed: {message}")]
+    Runtime { message: String },
+
     #[error("JSON output failed: {source}")]
     Json { source: serde_json::Error },
 
@@ -43,11 +53,14 @@ impl AppError {
         match self {
             AppError::NotImplemented { .. } => 2,
             AppError::MtpNotVisible { .. } => 3,
+            AppError::MtpExclusiveAccess { .. } => 4,
             AppError::UsbEnumeration { .. }
             | AppError::ProcessInspection { .. }
             | AppError::DeviceNotFound { .. }
             | AppError::NoDevices
             | AppError::MultipleDevices { .. }
+            | AppError::Mtp { .. }
+            | AppError::Runtime { .. }
             | AppError::Json { .. } => 1,
         }
     }
@@ -90,6 +103,36 @@ pub fn write_devices(devices: &[Tp7Device], json: bool) -> Result<(), AppError> 
             println!("  address: {address}");
         }
         println!("  interfaces: {}", interface_summary(&device.interfaces));
+    }
+
+    Ok(())
+}
+
+pub fn write_status(report: &StatusReport, json: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    println!(
+        "{}  {}  {}",
+        report.usb.serial_number.as_deref().unwrap_or("<no-serial>"),
+        report.usb.mode,
+        report.usb.product.as_deref().unwrap_or("TP-7")
+    );
+    println!(
+        "  mtp: {} {} ({})",
+        report.mtp.manufacturer, report.mtp.model, report.mtp.device_version
+    );
+    println!("  mtp serial: {}", report.mtp.serial_number);
+    println!("  supports rename: {}", report.mtp.supports_rename);
+    println!("  storages: {}", report.mtp.storage_count);
+
+    for storage in &report.mtp.storages {
+        println!(
+            "  - {}: {} free of {} bytes ({})",
+            storage.id, storage.free_space_bytes, storage.max_capacity_bytes, storage.description
+        );
     }
 
     Ok(())

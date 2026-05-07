@@ -3,6 +3,7 @@ mod connect;
 mod device;
 mod doctor;
 mod output;
+mod status;
 
 pub use output::AppError;
 
@@ -24,7 +25,10 @@ pub fn run() -> Result<(), AppError> {
             let report = doctor::run_doctor(cli.device.as_deref())?;
             output::write_doctor(&report, cli.json)
         }
-        Command::Status => Err(AppError::not_implemented("status")),
+        Command::Status => {
+            let report = status::run_status(cli.device.as_deref())?;
+            output::write_status(&report, cli.json)
+        }
         Command::Connect => {
             let report = connect::run_connect(cli.device.as_deref())?;
             output::write_connect(&report, cli.json)
