@@ -1,11 +1,11 @@
 use serde::Serialize;
-use std::thread;
-use std::time::{Duration, Instant};
 
-use crate::device::{Tp7Device, UsbMode, list_tp7_devices, select_one_device};
-use crate::midi::{MidiSwitchReport, switch_tp7_to_mtp};
+use crate::device::{Tp7Device, UsbMode};
+use crate::midi::MidiSwitchReport;
+use crate::mtp_session::{
+    MtpOpenPolicy, PreparedMtpDevice, block_on, open_mtp_device, prepare_mtp_device,
+};
 use crate::output::AppError;
-use crate::status::run_status;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ConnectReport {
@@ -35,51 +35,27 @@ pub enum MtpSessionStatus {
 }
 
 pub fn run_connect(serial: Option<&str>) -> Result<ConnectReport, AppError> {
-    let initial_device = select_one_device(list_tp7_devices()?, serial)?;
+    let prepared = prepare_mtp_device(serial, MtpOpenPolicy::AutoSwitch)?;
 
-    if is_mtp_visible(&initial_device) {
-        return Ok(ready_report(&initial_device, &initial_device, false, None));
-    }
-
-    if initial_device.mode != UsbMode::AudioMidi {
-        return Err(AppError::MtpNotVisible {
-            serial: serial_for_error(&initial_device),
-            mode: initial_device.mode.to_string(),
-        });
-    }
-
-    let midi_switch = switch_tp7_to_mtp(&initial_device)?;
-    let final_device = wait_for_mtp(&initial_device, serial, Duration::from_secs(12))?;
-
-    Ok(ready_report(
-        &initial_device,
-        &final_device,
-        true,
-        Some(midi_switch),
-    ))
+    Ok(ready_report(&prepared))
 }
 
-fn ready_report(
-    initial_device: &Tp7Device,
-    final_device: &Tp7Device,
-    switched: bool,
-    midi_switch: Option<MidiSwitchReport>,
-) -> ConnectReport {
-    let mtp_session = validate_mtp_session(final_device.serial_number.as_deref());
+fn ready_report(prepared: &PreparedMtpDevice) -> ConnectReport {
+    let mtp_session = validate_mtp_session(prepared.usb.serial_number.as_deref());
     let message = match mtp_session.status {
-        MtpSessionStatus::Open if switched => {
+        MtpSessionStatus::Open if prepared.switched => {
             "TP-7 switched to MTP mode and the MTP session opened.".to_string()
         }
         MtpSessionStatus::Open => {
             "TP-7 already exposes MTP and the MTP session opened.".to_string()
         }
-        MtpSessionStatus::Busy if switched => {
+        MtpSessionStatus::Busy if prepared.switched => {
             "TP-7 switched to MTP mode, but another process owns the MTP interface.".to_string()
         }
         MtpSessionStatus::Busy => {
             "TP-7 exposes MTP, but another process owns the MTP interface.".to_string()
         }
-        MtpSessionStatus::Failed if switched => {
+        MtpSessionStatus::Failed if prepared.switched => {
             "TP-7 switched to MTP mode, but MTP session validation failed.".to_string()
         }
         MtpSessionStatus::Failed => {
@@ -88,53 +64,34 @@ fn ready_report(
     };
 
     ConnectReport {
-        serial_number: final_device.serial_number.clone(),
-        initial_mode: initial_device.mode.clone(),
-        final_mode: final_device.mode.clone(),
-        mtp_ready: is_mtp_visible(final_device),
-        switched,
-        midi_switch,
+        serial_number: prepared.usb.serial_number.clone(),
+        initial_mode: prepared.initial_usb.mode.clone(),
+        final_mode: prepared.usb.mode.clone(),
+        mtp_ready: is_mtp_visible(&prepared.usb),
+        switched: prepared.switched,
+        midi_switch: prepared.midi_switch.clone(),
         mtp_session,
         message,
     }
 }
 
-fn wait_for_mtp(
-    initial_device: &Tp7Device,
-    serial: Option<&str>,
-    timeout: Duration,
-) -> Result<Tp7Device, AppError> {
-    let deadline = Instant::now() + timeout;
-    let fallback_serial = initial_device.serial_number.as_deref();
-
-    while Instant::now() < deadline {
-        let devices = list_tp7_devices()?;
-        let devices = match serial.or(fallback_serial) {
-            Some(serial) => devices
-                .into_iter()
-                .filter(|device| device.serial_number.as_deref() == Some(serial))
-                .collect::<Vec<_>>(),
-            None => devices,
-        };
-
-        if let Some(device) = devices.into_iter().find(is_mtp_visible) {
-            return Ok(device);
-        }
-
-        thread::sleep(Duration::from_millis(250));
-    }
-
-    Err(AppError::MtpNotVisible {
-        serial: serial_for_error(initial_device),
-        mode: initial_device.mode.to_string(),
-    })
-}
-
 fn validate_mtp_session(serial: Option<&str>) -> MtpSessionCheck {
-    match run_status(serial) {
-        Ok(report) => MtpSessionCheck {
+    match block_on(async {
+        let device = open_mtp_device(serial).await?;
+        let storages = device
+            .storages()
+            .await
+            .map_err(crate::mtp_session::map_mtp_error)?;
+        let storage_count = storages.len();
+        device
+            .close()
+            .await
+            .map_err(crate::mtp_session::map_mtp_error)?;
+        Ok(storage_count)
+    }) {
+        Ok(storage_count) => MtpSessionCheck {
             status: MtpSessionStatus::Open,
-            storage_count: Some(report.mtp.storage_count),
+            storage_count: Some(storage_count),
             message: "MTP session opened successfully.".to_string(),
         },
         Err(AppError::MtpExclusiveAccess { message }) => MtpSessionCheck {
@@ -152,11 +109,4 @@ fn validate_mtp_session(serial: Option<&str>) -> MtpSessionCheck {
 
 fn is_mtp_visible(device: &Tp7Device) -> bool {
     matches!(device.mode, UsbMode::Mtp | UsbMode::Mixed)
-}
-
-fn serial_for_error(device: &Tp7Device) -> String {
-    device
-        .serial_number
-        .clone()
-        .unwrap_or_else(|| "<no-serial>".to_string())
 }

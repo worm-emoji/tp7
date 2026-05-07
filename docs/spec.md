@@ -382,7 +382,7 @@ Current choices:
 
 ## Implementation Plan
 
-Phases 0 through 3 now have working prototype coverage: CLI scaffolding, USB detection, diagnostics, CoreMIDI mode switching, and MTP status validation. The next implementation phase is file browsing over an MTP session that is opened immediately after the switch.
+Phases 0 through 3 now have working prototype coverage: CLI scaffolding, USB detection, diagnostics, CoreMIDI mode switching, and MTP status validation. Phase 4 has started with a shared MTP session layer and `tp7 ls` support for root and nested paths.
 
 ### Phase 0: Baseline Project
 
@@ -434,7 +434,7 @@ Implement object tree traversal and remote path resolution.
 
 Deliverable:
 
-- `tp7 ls`
+- `tp7 ls` (implemented for folder listings, file targets, `--long`, `--ids`, and `--json`)
 - `tp7 tree`
 - `tp7 stat`
 

@@ -2,7 +2,9 @@ mod cli;
 mod connect;
 mod device;
 mod doctor;
+mod ls;
 mod midi;
+mod mtp_session;
 mod output;
 mod status;
 mod usb_owner;
@@ -35,7 +37,14 @@ pub fn run() -> Result<(), AppError> {
             let report = connect::run_connect(cli.device.as_deref())?;
             output::write_connect(&report, cli.json)
         }
-        Command::Ls { .. } => Err(AppError::not_implemented("ls")),
+        Command::Ls(args) => {
+            let report = ls::run_ls(
+                cli.device.as_deref(),
+                cli.auto_connect,
+                args.remote_path.as_str(),
+            )?;
+            output::write_ls(&report, cli.json, args.long, args.ids)
+        }
         Command::Tree { .. } => Err(AppError::not_implemented("tree")),
         Command::Stat { .. } => Err(AppError::not_implemented("stat")),
         Command::Pull { .. } => Err(AppError::not_implemented("pull")),

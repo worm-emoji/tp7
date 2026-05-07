@@ -4,6 +4,7 @@ use thiserror::Error;
 use crate::connect::ConnectReport;
 use crate::device::{Tp7Device, interface_summary};
 use crate::doctor::{DoctorReport, ProcessConflict};
+use crate::ls::{LsReport, ObjectKind};
 use crate::status::StatusReport;
 use crate::usb_owner::UsbOwner;
 
@@ -29,6 +30,20 @@ pub enum AppError {
 
     #[error("TP-7 {serial} is in {mode} mode; no MTP-compatible interface is visible")]
     MtpNotVisible { serial: String, mode: String },
+
+    #[error(
+        "TP-7 {serial} is in {mode} mode; rerun with --auto-connect to switch into MTP mode for this command"
+    )]
+    AutoConnectRequired { serial: String, mode: String },
+
+    #[error("invalid remote path {path}: {message}")]
+    InvalidRemotePath { path: String, message: String },
+
+    #[error("remote path was not found: {path}")]
+    RemotePathNotFound { path: String },
+
+    #[error("remote path is not a folder: {path}")]
+    RemotePathNotDirectory { path: String },
 
     #[error("MTP operation failed: {message}")]
     Mtp { message: String },
@@ -68,8 +83,8 @@ impl AppError {
 
     pub fn exit_code(&self) -> i32 {
         match self {
-            AppError::NotImplemented { .. } => 2,
-            AppError::MtpNotVisible { .. } => 3,
+            AppError::NotImplemented { .. } | AppError::InvalidRemotePath { .. } => 2,
+            AppError::MtpNotVisible { .. } | AppError::AutoConnectRequired { .. } => 3,
             AppError::MtpExclusiveAccess { .. } => 4,
             AppError::Midi { .. }
             | AppError::MidiTimeout { .. }
@@ -80,6 +95,8 @@ impl AppError {
             | AppError::DeviceNotFound { .. }
             | AppError::NoDevices
             | AppError::MultipleDevices { .. }
+            | AppError::RemotePathNotFound { .. }
+            | AppError::RemotePathNotDirectory { .. }
             | AppError::Mtp { .. }
             | AppError::Runtime { .. }
             | AppError::Json { .. } => 1,
@@ -188,6 +205,39 @@ pub fn write_connect(report: &ConnectReport, json: bool) -> Result<(), AppError>
     Ok(())
 }
 
+pub fn write_ls(report: &LsReport, json: bool, long: bool, ids: bool) -> Result<(), AppError> {
+    if json {
+        write_json(report)?;
+        return Ok(());
+    }
+
+    for entry in &report.entries {
+        let name = ls_display_name(entry.name.as_str(), &entry.kind);
+
+        match (long, ids) {
+            (true, true) => println!(
+                "{:>10} {:<6} {:>12} {:<15} {}",
+                entry.id,
+                ls_kind_label(&entry.kind),
+                entry.size,
+                entry.modified.as_deref().unwrap_or("-"),
+                name
+            ),
+            (true, false) => println!(
+                "{:<6} {:>12} {:<15} {}",
+                ls_kind_label(&entry.kind),
+                entry.size,
+                entry.modified.as_deref().unwrap_or("-"),
+                name
+            ),
+            (false, true) => println!("{:>10} {}", entry.id, name),
+            (false, false) => println!("{name}"),
+        }
+    }
+
+    Ok(())
+}
+
 pub fn write_doctor(report: &DoctorReport, json: bool) -> Result<(), AppError> {
     if json {
         write_json(report)?;
@@ -239,6 +289,20 @@ fn write_json<T: Serialize + ?Sized>(value: &T) -> Result<(), AppError> {
 
 fn display_opt(value: &Option<String>) -> &str {
     value.as_deref().unwrap_or("unknown")
+}
+
+fn ls_kind_label(kind: &ObjectKind) -> &'static str {
+    match kind {
+        ObjectKind::File => "file",
+        ObjectKind::Folder => "folder",
+    }
+}
+
+fn ls_display_name(name: &str, kind: &ObjectKind) -> String {
+    match kind {
+        ObjectKind::File => name.to_string(),
+        ObjectKind::Folder => format!("{name}/"),
+    }
 }
 
 fn print_process_conflict(conflict: &ProcessConflict) {
