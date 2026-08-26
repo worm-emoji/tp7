@@ -39,7 +39,7 @@ pub fn run_status(serial: Option<&str>) -> Result<StatusReport, AppError> {
         let session = open_mtp_session(serial, MtpOpenPolicy::MtpOnly).await?;
         let usb = session.prepared.usb.clone();
         let mtp = read_mtp_status(&session.device).await?;
-        session.close().await?;
+        session.release().await?;
 
         Ok(StatusReport { usb, mtp })
     })

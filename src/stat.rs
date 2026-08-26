@@ -27,9 +27,9 @@ pub fn run_stat(
     block_on(async {
         let session = open_mtp_session(serial, policy).await?;
         let result = read_stat(&session.device, remote_path).await;
-        let close_result = session.close().await;
+        let release_result = session.release().await;
 
-        match (result, close_result) {
+        match (result, release_result) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) => Err(error),
             (Ok(_), Err(error)) => Err(error),

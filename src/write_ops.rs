@@ -41,9 +41,9 @@ pub fn run_mkdir(
     block_on(async {
         let session = open_mtp_session(serial, policy).await?;
         let result = write_mkdir(&session.device, remote_path, parents).await;
-        let close_result = session.close().await;
+        let release_result = session.release().await;
 
-        match (result, close_result) {
+        match (result, release_result) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) => Err(error),
             (Ok(_), Err(error)) => Err(error),
@@ -63,9 +63,9 @@ pub fn run_rename(
     block_on(async {
         let session = open_mtp_session(serial, policy).await?;
         let result = write_rename(&session.device, remote_path, new_name).await;
-        let close_result = session.close().await;
+        let release_result = session.release().await;
 
-        match (result, close_result) {
+        match (result, release_result) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) => Err(error),
             (Ok(_), Err(error)) => Err(error),
@@ -86,9 +86,9 @@ pub fn run_rm(
     block_on(async {
         let session = open_mtp_session(serial, policy).await?;
         let result = write_rm(&session.device, remote_path, recursive, force, dry_run).await;
-        let close_result = session.close().await;
+        let release_result = session.release().await;
 
-        match (result, close_result) {
+        match (result, release_result) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) => Err(error),
             (Ok(_), Err(error)) => Err(error),

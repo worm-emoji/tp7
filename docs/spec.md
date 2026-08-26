@@ -29,7 +29,10 @@ Device identity:
 - Product: `TP-7`
 - Vendor string: `teenage engineering`
 - Vendor ID: `0x2367`
-- Product ID: `0x0019`
+- Product IDs: `0x0019` in the original observation; `0x8019` for the
+  audio/MIDI personality on another observed unit. The latter re-enumerates as
+  `0x0019` in MTP mode, so interface descriptors remain the authoritative mode
+  signal.
 - Serial: `F1RTL11C`
 - USB speed: high speed, 480 Mbps
 - USB version: 2.0
@@ -280,6 +283,9 @@ Useful flags:
 - `-t, --sort-time`: sort by modified time, newest first.
 - `-r, --reverse`: reverse listing order.
 - `-i, --ids`: show MTP object IDs.
+- `--take-over`: after an exclusive-access failure, terminate and retry only
+  when macOS reports `ptpcamerad` as the exclusive owner of the TP-7 MTP
+  interface. Other owners remain untouched.
 - `--json`
 
 `tp7 tree [remote-path]`
