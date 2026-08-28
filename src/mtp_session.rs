@@ -4,7 +4,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use mtp_rs::MtpDevice;
-use mtp_rs::ptp::DevicePropertyCode;
 
 use crate::device::{
     TP7_MTP_PRODUCT_ID, TP7_VENDOR_ID, Tp7Device, UsbMode, list_tp7_devices, select_one_device,
@@ -215,16 +214,14 @@ pub async fn open_mtp_device(serial: Option<&str>) -> Result<MtpDevice, AppError
         Some(serial) => {
             MtpDevice::builder()
                 .known_devices(KNOWN_TP7)
-                .session_id(TP7_SESSION_ID)
-                .reuse_existing_session(true)
+                .reuse_existing_session(TP7_SESSION_ID)
                 .open_by_serial(serial)
                 .await
         }
         None => {
             MtpDevice::builder()
                 .known_devices(KNOWN_TP7)
-                .session_id(TP7_SESSION_ID)
-                .reuse_existing_session(true)
+                .reuse_existing_session(TP7_SESSION_ID)
                 .open_first()
                 .await
         }
@@ -237,26 +234,7 @@ pub async fn open_mtp_device(serial: Option<&str>) -> Result<MtpDevice, AppError
 }
 
 async fn initialize_tp7_session(device: &MtpDevice) -> Result<(), AppError> {
-    let session = device.session();
-
-    session
-        .get_device_prop_desc(DevicePropertyCode::BatteryLevel)
-        .await
-        .map_err(map_mtp_error)?;
     device.storages().await.map_err(map_mtp_error)?;
-    device.storages().await.map_err(map_mtp_error)?;
-    session
-        .get_device_prop_value(DevicePropertyCode::BatteryLevel)
-        .await
-        .map_err(map_mtp_error)?;
-    session
-        .get_device_prop_value(DevicePropertyCode::BatteryLevel)
-        .await
-        .map_err(map_mtp_error)?;
-    session
-        .get_device_prop_value(DevicePropertyCode::DateTime)
-        .await
-        .map_err(map_mtp_error)?;
 
     Ok(())
 }

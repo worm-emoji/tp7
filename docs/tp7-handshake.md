@@ -148,12 +148,14 @@ What each step taught us:
   traffic while idle. Its stable pre-list initialization reads the battery
   descriptor, refreshes storage metadata twice, reads battery level twice and
   device time once, then refreshes storage metadata before listing objects.
-  A smaller prefix remained stable only until object listing began. The CLI now
-  performs the full pre-list initialization, uses FieldKit's stable session ID,
-  reuses `SessionAlreadyOpen` without sending `CloseSession`, and leaves USB
-  cleanup to process exit. Ordinary commands therefore leave the TP-7 in MTP
-  without polling or a resident process; `tp7 eject` remains the explicit
-  protocol-level close.
+  A smaller prefix remained stable only until object listing began. The CLI
+  uses FieldKit's stable session ID through `mtp-rs` 0.32.0, reuses
+  `SessionAlreadyOpen` without sending `CloseSession`, primes storage metadata,
+  and leaves USB cleanup to process exit. Ordinary commands therefore leave
+  the TP-7 in MTP without polling or a resident process; `tp7 eject` remains
+  the explicit protocol-level close. The FieldKit property reads remain useful
+  reverse-engineering evidence, but are not exposed by the backend-neutral
+  high-level API in `mtp-rs` 0.32.0.
 - `ls --take-over` automates that recovery narrowly: it acts only after an
   exclusive-access failure and only when IORegistry identifies `ptpcamerad` as
   the exclusive TP-7 MTP interface owner. It leaves every other owner alone.
@@ -163,8 +165,8 @@ What each step taught us:
 - Newer firmware accepts mode payload `[0x01, 0x03]`. FieldKit suggests
   `[0x01, 0x02]` may be a fallback for older firmware.
 - MTP support lives behind our own session layer. `ls`, `tree`, `stat`, and
-  `pull`, `push`, `rename`, and `rm` now use that same switch/open/work/close
-  flow.
+  `pull`, `push`, `rename`, and `rm` now use the same switch/open/work/release
+  flow, backed by the upstream `mtp-rs` 0.32.0 session-reuse API.
 - TP-7 firmware `1.1.9` accepted file upload, rename, and delete in smoke tests,
   but rejected folder creation with MTP `GeneralError`.
 - `push --overwrite` stages a replacement under a temporary remote name before

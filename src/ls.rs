@@ -7,7 +7,7 @@ use crate::remote::{RemoteObject, RemoteTarget, first_storage, list_remote_objec
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LsReport {
     pub path: String,
-    pub storage_id: u32,
+    pub storage_id: u64,
     pub entries: Vec<LsEntry>,
 }
 

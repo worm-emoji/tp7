@@ -1,6 +1,4 @@
-use mtp_rs::ResponseCode;
-use mtp_rs::Storage;
-use mtp_rs::ptp::ObjectHandle;
+use mtp_rs::{ObjectHandle, ObjectInfo, Storage};
 use serde::{Deserialize, Serialize};
 
 use crate::mtp_session::{MtpOpenPolicy, block_on, map_mtp_error, open_mtp_session};
@@ -227,7 +225,7 @@ async fn find_child(
     storage: &Storage,
     parent: Option<ObjectHandle>,
     name: &str,
-) -> Result<Option<mtp_rs::ptp::ObjectInfo>, AppError> {
+) -> Result<Option<ObjectInfo>, AppError> {
     Ok(list_object_infos(storage, parent)
         .await?
         .into_iter()
@@ -270,13 +268,8 @@ fn renamed_path(old_path: &str, new_name: &str) -> String {
 }
 
 fn map_create_folder_error(error: mtp_rs::Error) -> AppError {
-    match error.response_code() {
-        Some(
-            ResponseCode::GeneralError
-            | ResponseCode::OperationNotSupported
-            | ResponseCode::StoreReadOnly
-            | ResponseCode::AccessDenied,
-        ) => AppError::MtpUnsupported {
+    match error {
+        mtp_rs::Error::Unsupported | mtp_rs::Error::AccessDenied => AppError::MtpUnsupported {
             message: format!("TP-7 rejected folder creation ({error})"),
         },
         _ => map_mtp_error(error),
