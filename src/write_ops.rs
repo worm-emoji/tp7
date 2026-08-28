@@ -269,9 +269,11 @@ fn renamed_path(old_path: &str, new_name: &str) -> String {
 
 fn map_create_folder_error(error: mtp_rs::Error) -> AppError {
     match error {
-        mtp_rs::Error::Unsupported | mtp_rs::Error::AccessDenied => AppError::MtpUnsupported {
-            message: format!("TP-7 rejected folder creation ({error})"),
-        },
+        mtp_rs::Error::Unsupported | mtp_rs::Error::AccessDenied | mtp_rs::Error::Other { .. } => {
+            AppError::MtpUnsupported {
+                message: format!("TP-7 rejected folder creation ({error})"),
+            }
+        }
         _ => map_mtp_error(error),
     }
 }
@@ -284,6 +286,18 @@ mod tests {
     fn rejects_invalid_remote_names() {
         assert!(validate_remote_name("../x").is_err());
         assert!(validate_remote_name("").is_err());
+    }
+
+    #[test]
+    fn maps_tp7_general_folder_error_to_unsupported() {
+        let error = mtp_rs::Error::Other {
+            detail: "GeneralError".to_string(),
+        };
+
+        assert!(matches!(
+            map_create_folder_error(error),
+            AppError::MtpUnsupported { .. }
+        ));
     }
 
     #[test]
